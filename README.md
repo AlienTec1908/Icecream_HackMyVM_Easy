@@ -1,6 +1,6 @@
 # Icecream - HackMyVM (Easy)
 
-![Icecream.png](Icecream.png)
+![icecream.png](icecream.png)
 
 ## Übersicht
 
